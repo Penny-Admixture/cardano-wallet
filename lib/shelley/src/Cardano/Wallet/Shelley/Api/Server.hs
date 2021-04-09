@@ -52,6 +52,7 @@ import Cardano.Wallet.Api
     , SharedWallets
     , ShelleyMigrations
     , StakePools
+    , Tokens
     , Transactions
     , WalletKeys
     , Wallets
@@ -63,6 +64,7 @@ import Cardano.Wallet.Api.Server
     , deleteTransaction
     , deleteWallet
     , derivePublicKey
+    , forgeToken
     , getAsset
     , getAssetDefault
     , getCurrentEpoch
@@ -228,6 +230,7 @@ server byron icarus shelley multisig spl ntp =
     :<|> settingS
     :<|> smash
     :<|> sharedWallets
+    :<|> tokens
   where
     wallets :: Server Wallets
     wallets = deleteWallet shelley
@@ -494,6 +497,9 @@ server byron icarus shelley multisig spl ntp =
         :<|> patchSharedWallet multisig ShelleyKey Payment
         :<|> patchSharedWallet multisig ShelleyKey Delegation
         :<|> deleteWallet multisig
+
+    tokens :: Server (Tokens n)
+    tokens = forgeToken shelley (delegationAddress @n)
 
 postAnyAddress
     :: NetworkId

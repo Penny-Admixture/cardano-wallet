@@ -167,6 +167,7 @@ import GHC.Stack
     ( HasCallStack )
 import Ouroboros.Network.Block
     ( SlotNo )
+import Cardano.Wallet.Api.Types (ForgeAmount)
 
 import qualified Cardano.Api as Cardano
 import qualified Cardano.Api.Byron as Byron
@@ -267,16 +268,18 @@ mkTx
     -- ^ Finalized asset selection
     -> Coin
     -- ^ Explicit fee amount
+    -> Maybe ForgeAmount
+    -- ^ Optional amount of tokens to mint and/or burn
     -> ShelleyBasedEra era
     -> Either ErrMkTx (Tx, SealedTx)
-mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees era = do
+mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeAmt era = do
     let TxPayload md certs mkExtraWits = payload
     let wdrls = mkWithdrawals
             networkId
             (toRewardAccountRaw . toXPub $ rewardAcnt)
             wdrl
 
-    unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees)
+    unsigned <- mkUnsignedTx era ttl cs md wdrls certs (toCardanoLovelace fees) mForgeAmt 
 
     wits <- case (txWitnessTagFor @k) of
         TxWitnessShelleyUTxO -> do
@@ -314,7 +317,7 @@ newTransactionLayer
     => NetworkId
     -> TransactionLayer k
 newTransactionLayer networkId = TransactionLayer
-    { mkTransaction = \era stakeCreds keystore pp ctx selection -> do
+    { mkTransaction = \era stakeCreds keystore pp ctx selection forge -> do
         let ttl   = txTimeToLive ctx
         let wdrl  = withdrawalToCoin $ view #txWithdrawal ctx
         let delta = selectionDelta txOutCoin selection
@@ -1084,8 +1087,9 @@ mkUnsignedTx
     -> [(Cardano.StakeAddress, Cardano.Lovelace)]
     -> [Cardano.Certificate]
     -> Cardano.Lovelace
+    -> Maybe ForgeAmount
     -> Either ErrMkTx (Cardano.TxBody era)
-mkUnsignedTx era ttl cs md wdrls certs fees =
+mkUnsignedTx era ttl cs md wdrls certs fees mForgeAmnt =
     case era of
         ShelleyBasedEraShelley -> mkShelleyTx
         ShelleyBasedEraAllegra -> mkAllegraTx
@@ -1207,11 +1211,34 @@ mkUnsignedTx era ttl cs md wdrls certs fees =
         , Cardano.txUpdateProposal =
             Cardano.TxUpdateProposalNone
 
-        , Cardano.txMintValue =
-            Cardano.TxMintNone
+        , Cardano.txMintValue = 
+            case mForgeAmt of
+              Nothing -> Cardano.TxMintNone
+              Just forgeAmt ->
+                let
+                  mint =              toCardanoValue $ mintAmount forgeAmt
+                  burn = ensureBurn $ toCardanoValue $ burnAmount forgeAmt
+                  val = mint <> burn 
+                in
+                  Cardano.TxMintValue Cardano.MultiAssetInMaryEra val
         }
       where
         toErrMkTx = ErrConstructedInvalidTx . T.pack . Cardano.displayError
+
+        toCardanoValue :: TokenMap -> Cardano.Value
+        toCardanoValue (TokenMap policyId nameQtyMap) =
+          Cardano.Value
+          $ M.fromList
+          $ (Bifunctor.bimap
+              (mkAssetId policyId)
+              (fromIntegral . unTokenQuantity))
+          <$> M.toList nameQtyMap
+
+        ensureBurn :: Cardano.Value -> Cardano.Value
+        ensureBurn (Cardano.Value vs) = Cardano.Value $ ((* (-1)) . abs) <$> vs
+
+        mkAssetId :: TokenPolicyId -> TokenName -> Cardano.AssetId
+        mkAssetId (TokenPolicyId tkPol) (TokenName tkName) = Cardano.AssetId (Cardano.PolicyId . fromString . T.unpack . toText $ tkPol) (Cardano.AssetName tkName)
 
 mkWithdrawals
     :: NetworkId

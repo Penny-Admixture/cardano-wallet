@@ -105,6 +105,7 @@ library
     , template-haskell
     , text
     , text-class
+    , these
     , time
     , tls
     , tracer-transformers

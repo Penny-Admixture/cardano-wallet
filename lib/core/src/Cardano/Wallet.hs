@@ -1457,8 +1457,9 @@ signTransaction
     -> Passphrase "raw"
     -> TransactionCtx
     -> SelectionResult TokenBundle
+    -> Maybe ForgeAmount
     -> ExceptT ErrSignPayment IO (Tx, TxMeta, UTCTime, SealedTx)
-signTransaction ctx wid argChange mkRwdAcct pwd txCtx sel = db & \DBLayer{..} -> do
+signTransaction ctx wid argChange mkRwdAcct pwd txCtx sel mForgeAmount = db & \DBLayer{..} -> do
     era <- liftIO $ currentNodeEra nl
     withRootKey @_ @s ctx wid pwd ErrSignPaymentWithRootKey $ \xprv scheme -> do
         let pwdP = preparePassphrase scheme pwd
@@ -1474,7 +1475,7 @@ signTransaction ctx wid argChange mkRwdAcct pwd txCtx sel = db & \DBLayer{..} ->
             let rewardAcnt = mkRwdAcct (xprv, pwdP)
 
             (tx, sealedTx) <- withExceptT ErrSignPaymentMkTx $ ExceptT $ pure $
-                mkTransaction tl era rewardAcnt keyFrom pp txCtx sel'
+                mkTransaction tl era rewardAcnt keyFrom pp txCtx sel' mForgeAmount
 
             (time, meta) <- liftIO $ mkTxMeta ti (currentTip cp) s' txCtx sel'
             return (tx, meta, time, sealedTx)

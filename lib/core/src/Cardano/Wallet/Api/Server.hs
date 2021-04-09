@@ -84,6 +84,7 @@ module Cardano.Wallet.Api.Server
     , postSharedWallet
     , patchSharedWallet
     , mkSharedWallet
+    , forgeToken
 
     -- * Server error responses
     , IsServerError(..)
@@ -464,6 +465,7 @@ import Fmt
     ( blockListF, indentF, pretty )
 import GHC.Stack
     ( HasCallStack )
+import Cardano.Wallet.Api.Types (AddressForgeAmount(AddressForgeAmount))
 import Network.HTTP.Media.RenderHeader
     ( renderHeader )
 import Network.HTTP.Types.Header
@@ -1724,7 +1726,7 @@ postTransaction ctx genChange (ApiT wid) body = do
         sel <- liftHandler
             $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel Nothing
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)
@@ -1882,7 +1884,7 @@ joinStakePool ctx knownPools getPoolStatus apiPoolId (ApiT wid) body = do
             $ W.selectAssetsNoOutputs @_ @s @k wrk wid wal txCtx
             $ const Prelude.id
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel Nothing
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -1965,7 +1967,7 @@ quitStakePool ctx (ApiT wid) body = do
             $ W.selectAssetsNoOutputs @_ @s @k wrk wid wal txCtx
             $ const Prelude.id
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel Nothing
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -2454,6 +2456,15 @@ addressAmountToTxOut
     -> TxOut
 addressAmountToTxOut (AddressAmount (ApiT addr, _) c (ApiT assets)) =
     TxOut addr (TokenBundle.TokenBundle (coinFromQuantity c) assets)
+
+addressForgeAmountToTxOut
+    :: forall (n :: NetworkDiscriminant). AddressForgeAmount (ApiT Address, Proxy n)
+    -> TxOut
+addressForgeAmountToTxOut (AddressForgeAmount (ApiT addr, _) forgeAmt) =
+  let
+    assets = Api.mintAmount forgeAmt
+  in
+    TxOut addr (TokenBundle.TokenBundle mempty assets)
 
 natural :: Quantity q Word32 -> Quantity q Natural
 natural = Quantity . fromIntegral . getQuantity
@@ -3297,3 +3308,61 @@ instance HasSeverityAnnotation WalletEngineLog where
     getSeverityAnnotation = \case
         MsgWalletWorker msg -> getSeverityAnnotation msg
         MsgSubmitSealedTx msg -> getSeverityAnnotation msg
+
+forgeToken
+    :: forall ctx s k n.
+        ( ctx ~ ApiLayer s k
+        , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
+        , GenChange s
+        , HardDerivation k
+        , HasNetworkLayer ctx
+        , IsOwned s k
+        , Typeable n
+        , Typeable s
+        , WalletKey k
+        )
+    => ctx
+    -> ArgGenChange s
+    -> ApiT WalletId
+    -> Api.ForgeTokenData n
+    -> Handler (ApiTransaction n)
+forgeToken ctx genChange (ApiT wid) body = do
+    let pwd = coerce $ body ^. #passphrase . #getApiT
+    let outs = addressForgeAmountToTxOut <$> body ^. #forgePayments
+    let forgeAmt = mconcat $ NE.toList $ fmap (\(AddressForgeAmount _ amt) -> amt) $ body ^. #forgePayments
+    let md = body ^? #metadata . traverse . #getApiT
+    let mTTL = body ^? #timeToLive . traverse . #getQuantity
+
+    (wdrl, mkRwdAcct) <-
+        mkRewardAccountBuilder @_ @s @_ @n ctx wid (body ^. #withdrawal)
+
+    ttl <- liftIO $ W.getTxExpiry ti mTTL
+    let txCtx = defaultTransactionCtx
+            { txWithdrawal = wdrl
+            , txMetadata = md
+            , txTimeToLive = ttl
+            }
+
+    (sel, tx, txMeta, txTime) <- withWorkerCtx ctx wid liftE liftE $ \wrk -> do
+        w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
+        sel <- liftHandler
+            $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)
+        (tx, txMeta, txTime, sealedTx) <- liftHandler
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel (Just forgeAmt)
+        liftHandler
+            $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
+        pure (sel, tx, txMeta, txTime)
+
+    liftIO $ mkApiTransaction
+        (timeInterpreter $ ctx ^. networkLayer)
+        (txId tx)
+        (tx ^. #fee)
+        (NE.toList $ second Just <$> sel ^. #inputsSelected)
+        (tx ^. #outputs)
+        (tx ^. #withdrawals)
+        (txMeta, txTime)
+        (tx ^. #metadata)
+        #pendingSince
+  where
+    ti :: TimeInterpreter (ExceptT PastHorizonException IO)
+    ti = timeInterpreter (ctx ^. networkLayer)

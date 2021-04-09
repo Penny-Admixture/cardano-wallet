@@ -75,6 +75,7 @@ import Data.Text
     ( Text )
 import GHC.Generics
     ( Generic )
+import Cardano.Wallet.Api.Types (ForgeAmount)
 
 data TransactionLayer k = TransactionLayer
     { mkTransaction
@@ -91,6 +92,8 @@ data TransactionLayer k = TransactionLayer
         -> SelectionResult TxOut
             -- A balanced coin selection where all change addresses have been
             -- assigned.
+        -> Maybe ForgeAmount
+            -- A set of assets to mint and/or burn
         -> Either ErrMkTx (Tx, SealedTx)
         -- ^ Construct a standard transaction
         --
