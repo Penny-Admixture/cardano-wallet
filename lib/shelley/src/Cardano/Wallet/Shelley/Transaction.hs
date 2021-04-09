@@ -89,11 +89,14 @@ import Cardano.Wallet.Primitive.Types.Coin
 import Cardano.Wallet.Primitive.Types.TokenBundle
     ( TokenBundle )
 import Cardano.Wallet.Primitive.Types.TokenMap
-    ( AssetId (..), TokenMap )
+    ( AssetId (..), TokenMap)
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( TokenName (..) )
+    ( TokenName (..), TokenPolicyId(..))
 import Cardano.Wallet.Primitive.Types.TokenQuantity
-    ( TokenQuantity (..) )
+    ( TokenQuantity, unTokenQuantity )
+import Data.String (fromString)
+import Data.Text.Class
+    ( toText )
 import Cardano.Wallet.Primitive.Types.Tx
     ( SealedTx (..)
     , TokenBundleSizeAssessment (..)
@@ -167,11 +170,14 @@ import GHC.Stack
     ( HasCallStack )
 import Ouroboros.Network.Block
     ( SlotNo )
-import Cardano.Wallet.Api.Types (ForgeAmount)
+import Cardano.Wallet.Api.Types (ForgeAmount, mintAmount, burnAmount)
 
 import qualified Cardano.Api as Cardano
 import qualified Cardano.Api.Byron as Byron
 import qualified Cardano.Api.Shelley as Cardano
+import qualified Cardano.Api.Typed as Cardano
+import qualified Data.Map.Strict as M
+import qualified Data.Bifunctor as Bifunctor
 import qualified Cardano.Chain.Common as Byron
 import qualified Cardano.Crypto as CC
 import qualified Cardano.Crypto.DSIGN as DSIGN
@@ -326,7 +332,7 @@ newTransactionLayer networkId = TransactionLayer
                 withShelleyBasedEra era $ do
                     let payload = TxPayload (view #txMetadata ctx) mempty mempty
                     let fees = delta
-                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees
+                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge
 
             Just action -> do
                 withShelleyBasedEra era $ do
@@ -341,7 +347,7 @@ newTransactionLayer networkId = TransactionLayer
                                 unsafeSubtractCoin selection delta (stakeKeyDeposit pp)
                             _ ->
                                 delta
-                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees
+                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge
 
     , initSelectionCriteria = _initSelectionCriteria @k
 
@@ -1089,7 +1095,7 @@ mkUnsignedTx
     -> Cardano.Lovelace
     -> Maybe ForgeAmount
     -> Either ErrMkTx (Cardano.TxBody era)
-mkUnsignedTx era ttl cs md wdrls certs fees mForgeAmnt =
+mkUnsignedTx era ttl cs md wdrls certs fees mForgeAmt =
     case era of
         ShelleyBasedEraShelley -> mkShelleyTx
         ShelleyBasedEraAllegra -> mkAllegraTx
@@ -1226,19 +1232,19 @@ mkUnsignedTx era ttl cs md wdrls certs fees mForgeAmnt =
         toErrMkTx = ErrConstructedInvalidTx . T.pack . Cardano.displayError
 
         toCardanoValue :: TokenMap -> Cardano.Value
-        toCardanoValue (TokenMap policyId nameQtyMap) =
-          Cardano.Value
-          $ M.fromList
-          $ (Bifunctor.bimap
-              (mkAssetId policyId)
-              (fromIntegral . unTokenQuantity))
-          <$> M.toList nameQtyMap
+        toCardanoValue tokenMap =
+          Cardano.valueFromList $ Bifunctor.bimap (\(AssetId pol name) -> mkAssetId pol name) (fromIntegral . unTokenQuantity) <$> TokenMap.toFlatList tokenMap
+          -- Cardano.valueFromList
+          -- $ (Bifunctor.bimap
+          --     (mkAssetId policyId)
+          --     (fromIntegral . unTokenQuantity))
+          -- <$> M.toList nameQtyMap
 
         ensureBurn :: Cardano.Value -> Cardano.Value
-        ensureBurn (Cardano.Value vs) = Cardano.Value $ ((* (-1)) . abs) <$> vs
+        ensureBurn = Cardano.valueFromList . fmap (fmap ((* (-1)) . abs)) . Cardano.valueToList
 
         mkAssetId :: TokenPolicyId -> TokenName -> Cardano.AssetId
-        mkAssetId (TokenPolicyId tkPol) (TokenName tkName) = Cardano.AssetId (Cardano.PolicyId . fromString . T.unpack . toText $ tkPol) (Cardano.AssetName tkName)
+        mkAssetId (UnsafeTokenPolicyId tkPol) (UnsafeTokenName tkName) = Cardano.AssetId (Cardano.PolicyId . fromString . T.unpack . toText $ tkPol) (Cardano.AssetName tkName)
 
 mkWithdrawals
     :: NetworkId
