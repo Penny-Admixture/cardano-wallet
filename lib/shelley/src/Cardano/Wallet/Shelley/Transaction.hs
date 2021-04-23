@@ -96,6 +96,10 @@ import Cardano.Wallet.Primitive.Types.TokenPolicy
 import Cardano.Wallet.Primitive.Types.TokenQuantity
     ( TokenQuantity, unTokenQuantity )
 import Data.String (fromString)
+import Data.Maybe
+    ( fromMaybe )
+import Data.Foldable
+    ( asum )
 import Data.Text.Class
     ( toText )
 import Cardano.Wallet.Primitive.Types.Tx
@@ -1194,8 +1198,8 @@ mkUnsignedTx era ttl cs md wdrls certs fees mForgeAmt =
 
 
     mkMaryTx = do
-      _ <- case mForgeAmt of
-        Nothing -> pure ()
+      forgeOuts <- case mForgeAmt of
+        Nothing                        -> pure mempty
         Just (policyK, assetName, tos) -> do
           let
             toPaymentKeyHash :: Crypto.HD.XPrv -> Cardano.Hash Cardano.PaymentKey
@@ -1210,15 +1214,28 @@ mkUnsignedTx era ttl cs md wdrls certs fees mForgeAmt =
             assetId :: Cardano.AssetId
             assetId = Cardano.AssetId policyId assetName
   
-            outs = (\(AddressForgeAmount addr amt) -> Cardano.TxOut (_ addr) $ Cardano.TxOutValue Cardano.MultiAssetInMaryEra (Cardano.valueFromList $ [(assetId, amt)])) <$> tos
-          _f
+            toMaryAddr :: Address -> Cardano.AddressInEra Cardano.MaryEra
+            toMaryAddr (Address addr) =
+              fromMaybe (error "mkUnsignedTx: malformed address")
+              $ asum
+                [ Cardano.AddressInEra (Cardano.ShelleyAddressInEra Cardano.ShelleyBasedEraMary)
+                    <$> Cardano.deserialiseFromRawBytes Cardano.AsShelleyAddress addr
+        
+                , Cardano.AddressInEra Cardano.ByronAddressInAnyEra
+                    <$> Cardano.deserialiseFromRawBytes Cardano.AsByronAddress addr
+                ]
+
+            outs :: NE.NonEmpty (Cardano.TxOut Cardano.MaryEra)
+            outs = (\(AddressForgeAmount addr amt) -> Cardano.TxOut (toMaryAddr addr) $ Cardano.TxOutValue Cardano.MultiAssetInMaryEra (Cardano.valueFromList $ [(assetId, amt)])) <$> tos
+          pure $ NE.toList outs
 
       left toErrMkTx $ Cardano.makeTransactionBody $ Cardano.TxBodyContent
         { Cardano.txIns =
             toCardanoTxIn . fst <$> F.toList (inputsSelected cs)
 
         , Cardano.txOuts =
-            toMaryTxOut <$> (outputsCovered cs ++ F.toList (changeGenerated cs))
+            (toMaryTxOut <$> (outputsCovered cs ++ F.toList (changeGenerated cs)))
+            <> forgeOuts
 
         , Cardano.txWithdrawals =
             Cardano.TxWithdrawals Cardano.WithdrawalsInMaryEra wdrls
@@ -1247,15 +1264,14 @@ mkUnsignedTx era ttl cs md wdrls certs fees mForgeAmt =
             Cardano.TxUpdateProposalNone
 
         , Cardano.txMintValue = 
-            case mForgeAmt of
-              Nothing -> Cardano.TxMintNone
-              Just forgeAmt ->
-                let
-                  mint =              toCardanoValue $ mintAmount forgeAmt
-                  burn = ensureBurn $ toCardanoValue $ burnAmount forgeAmt
-                  val = mint <> burn 
-                in
-                  Cardano.TxMintValue Cardano.MultiAssetInMaryEra val
+            let
+              forgeOutAmt :: Cardano.TxOut Cardano.MaryEra -> Cardano.Value
+              forgeOutAmt (Cardano.TxOut _addr (Cardano.TxOutAdaOnly _ _)) = mempty
+              forgeOutAmt (Cardano.TxOut _addr (Cardano.TxOutValue _ v))   = v
+            in
+              case foldMap forgeOutAmt forgeOuts of
+                amt | amt == mempty -> Cardano.TxMintNone
+                amt -> Cardano.TxMintValue Cardano.MultiAssetInMaryEra amt
         }
       where
         toErrMkTx = ErrConstructedInvalidTx . T.pack . Cardano.displayError
