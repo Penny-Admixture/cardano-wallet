@@ -203,10 +203,12 @@ import Cardano.Address.Script
     ( Cosigner (..), KeyHash, Script, ScriptTemplate, ValidationLevel (..) )
 import Cardano.Api
     ( TxMetadataJsonSchema (..)
+    , AssetName
     , displayError
     , metadataFromJson
     , metadataToJson
     )
+import qualified Cardano.Api.Typed as Cardano (Quantity)
 import Cardano.Mnemonic
     ( MkSomeMnemonic (..)
     , MkSomeMnemonicError (..)
@@ -2778,38 +2780,57 @@ instance ToJSON (ApiT SmashServer) where
 
 data ForgeTokenData (n :: NetworkDiscriminant) = ForgeTokenData
     { forgePayments :: !(NonEmpty (AddressForgeAmount (ApiT Address, Proxy n)))
+    , assetName :: !AssetName
     , passphrase :: !(ApiT (Passphrase "lenient"))
-    , withdrawal :: !(Maybe ApiWithdrawalPostData)
     , metadata :: !(Maybe (ApiT TxMetadata))
     , timeToLive :: !(Maybe (Quantity "second" NominalDiffTime))
     } deriving (Eq, Generic, Show)
 
 data AddressForgeAmount addr = AddressForgeAmount
   { address :: !addr
-  , forge :: !ForgeAmount
+  , amt :: !Cardano.Quantity
   } deriving stock (Eq, Generic, Show)
-    deriving anyclass NFData
 
 newtype ForgeAmount = ForgeAmount
     { unForgeAmount
-        :: These W.TokenMap W.TokenMap
+        :: These (ApiT W.TokenMap) (ApiT W.TokenMap)
     }
     deriving stock (Eq, Generic)
-    deriving (Read, Show) via Quiet ForgeAmount
+    deriving (Show) via Quiet ForgeAmount
     deriving anyclass NFData
 
 mintAmount :: ForgeAmount -> W.TokenMap
-mintAmount (ForgeAmount (This _burn))       = mempty
-mintAmount (ForgeAmount (That mint))        = mint
-mintAmount (ForgeAmount (These _burn mint)) = mint
+mintAmount (ForgeAmount (This _burn))              = mempty
+mintAmount (ForgeAmount (That (ApiT mint)))        = mint
+mintAmount (ForgeAmount (These _burn (ApiT mint))) = mint
 
 burnAmount :: ForgeAmount -> W.TokenMap
-burnAmount (ForgeAmount (This burn))        = burn
-burnAmount (ForgeAmount (That _mint))       = mempty
-burnAmount (ForgeAmount (These burn _mint)) = burn
+burnAmount (ForgeAmount (This (ApiT burn)))        = burn
+burnAmount (ForgeAmount (That _mint))              = mempty
+burnAmount (ForgeAmount (These (ApiT burn) _mint)) = burn
 
 instance Monoid ForgeAmount where
   mempty = ForgeAmount $ These mempty mempty
 
 instance Semigroup ForgeAmount where
   (ForgeAmount x) <> (ForgeAmount y) = ForgeAmount $ x <> y
+
+instance FromJSON ForgeAmount where
+    parseJSON = genericParseJSON defaultRecordTypeOptions
+instance ToJSON ForgeAmount where
+    toJSON = genericToJSON defaultRecordTypeOptions
+
+instance DecodeAddress n => FromJSON (ForgeTokenData n) where
+    parseJSON = genericParseJSON defaultRecordTypeOptions
+instance EncodeAddress n => ToJSON (ForgeTokenData n) where
+    toJSON = genericToJSON defaultRecordTypeOptions
+
+instance FromJSON a => FromJSON (AddressForgeAmount a) where
+    parseJSON = withObject "AddressForgeAmount " $ \v ->
+        prependFailure "parsing AddressForgeAmount failed, " $
+        AddressForgeAmount
+            <$> v .: "address"
+            <*> v .:? "forge" .!= mempty
+
+instance ToJSON a => ToJSON (AddressForgeAmount a) where
+    toJSON = genericToJSON defaultRecordTypeOptions

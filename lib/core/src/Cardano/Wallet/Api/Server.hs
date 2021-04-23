@@ -1726,7 +1726,7 @@ postTransaction ctx genChange (ApiT wid) body = do
         sel <- liftHandler
             $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel Nothing
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)
@@ -1884,7 +1884,7 @@ joinStakePool ctx knownPools getPoolStatus apiPoolId (ApiT wid) body = do
             $ W.selectAssetsNoOutputs @_ @s @k wrk wid wal txCtx
             $ const Prelude.id
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel Nothing
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -1967,7 +1967,7 @@ quitStakePool ctx (ApiT wid) body = do
             $ W.selectAssetsNoOutputs @_ @s @k wrk wid wal txCtx
             $ const Prelude.id
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel Nothing
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -2457,14 +2457,14 @@ addressAmountToTxOut
 addressAmountToTxOut (AddressAmount (ApiT addr, _) c (ApiT assets)) =
     TxOut addr (TokenBundle.TokenBundle (coinFromQuantity c) assets)
 
-addressForgeAmountToTxOut
-    :: forall (n :: NetworkDiscriminant). AddressForgeAmount (ApiT Address, Proxy n)
-    -> TxOut
-addressForgeAmountToTxOut (AddressForgeAmount (ApiT addr, _) forgeAmt) =
-  let
-    assets = Api.mintAmount forgeAmt
-  in
-    TxOut addr (TokenBundle.TokenBundle mempty assets)
+-- addressForgeAmountToTxOut
+--     :: forall (n :: NetworkDiscriminant). AddressForgeAmount (ApiT Address, Proxy n)
+--     -> TxOut
+-- addressForgeAmountToTxOut (AddressForgeAmount (ApiT addr, _) forgeAmt) =
+--   let
+--     assets = Api.mintAmount forgeAmt
+--   in
+--     TxOut addr (TokenBundle.TokenBundle mempty assets)
 
 natural :: Quantity q Word32 -> Quantity q Natural
 natural = Quantity . fromIntegral . getQuantity
@@ -3328,19 +3328,21 @@ forgeToken
     -> Handler (ApiTransaction n)
 forgeToken ctx genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
-    let outs = addressForgeAmountToTxOut <$> body ^. #forgePayments
-    let forgeAmt = mconcat $ NE.toList $ fmap (\(AddressForgeAmount _ amt) -> amt) $ body ^. #forgePayments
+    let outs = undefined
+    let forgePayments = fmap (\(AddressForgeAmount (ApiT addr, _) amt) -> AddressForgeAmount addr amt) $ body ^. #forgePayments
+    let forgeAssetName = body ^. #assetName
     let md = body ^? #metadata . traverse . #getApiT
     let mTTL = body ^? #timeToLive . traverse . #getQuantity
 
     (wdrl, mkRwdAcct) <-
-        mkRewardAccountBuilder @_ @s @_ @n ctx wid (body ^. #withdrawal)
+        mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
 
     ttl <- liftIO $ W.getTxExpiry ti mTTL
     let txCtx = defaultTransactionCtx
             { txWithdrawal = wdrl
             , txMetadata = md
             , txTimeToLive = ttl
+            , txForgeAmount = Just (forgeAssetName, forgePayments)
             }
 
     (sel, tx, txMeta, txTime) <- withWorkerCtx ctx wid liftE liftE $ \wrk -> do
@@ -3348,7 +3350,7 @@ forgeToken ctx genChange (ApiT wid) body = do
         sel <- liftHandler
             $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel (Just forgeAmt)
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)

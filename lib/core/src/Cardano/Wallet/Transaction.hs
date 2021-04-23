@@ -39,8 +39,8 @@ import Prelude
 
 import Cardano.Address.Derivation
     ( XPrv )
-import Cardano.Api
-    ( AnyCardanoEra )
+import Cardano.Api.Typed
+    ( AnyCardanoEra, AssetName )
 import Cardano.Wallet.Primitive.AddressDerivation
     ( Depth (..), DerivationIndex, Passphrase )
 import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
@@ -75,7 +75,7 @@ import Data.Text
     ( Text )
 import GHC.Generics
     ( Generic )
-import Cardano.Wallet.Api.Types (ForgeAmount)
+import Cardano.Wallet.Api.Types (AddressForgeAmount)
 
 data TransactionLayer k = TransactionLayer
     { mkTransaction
@@ -92,8 +92,6 @@ data TransactionLayer k = TransactionLayer
         -> SelectionResult TxOut
             -- A balanced coin selection where all change addresses have been
             -- assigned.
-        -> Maybe ForgeAmount
-            -- A set of assets to mint and/or burn
         -> Either ErrMkTx (Tx, SealedTx)
         -- ^ Construct a standard transaction
         --
@@ -155,7 +153,9 @@ data TransactionCtx = TransactionCtx
     -- ^ Transaction expiry (TTL) slot.
     , txDelegationAction :: Maybe DelegationAction
     -- ^ An additional delegation to take.
-    } deriving (Show, Generic, Eq)
+    , txForgeAmount :: Maybe (AssetName, NonEmpty (AddressForgeAmount Address))
+    -- ^ Amount to mint/burn, if this is a forging transaction.
+    } deriving (Show, Eq)
 
 data Withdrawal
     = WithdrawalSelf !RewardAccount !(NonEmpty DerivationIndex) !Coin
@@ -177,6 +177,7 @@ defaultTransactionCtx = TransactionCtx
     , txMetadata = Nothing
     , txTimeToLive = maxBound
     , txDelegationAction = Nothing
+    , txForgeAmount = Nothing
     }
 
 -- | Whether the user is attempting any particular delegation action.
