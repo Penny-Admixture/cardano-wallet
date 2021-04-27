@@ -49,8 +49,10 @@ import Cardano.Wallet.Api
     ( Api )
 import Cardano.Wallet.Api.Types
     ( AccountPostData (..)
+    , AddressForgeAmount (..)
     , AddressAmount (..)
     , AnyAddress (..)
+    , ForgeTokenData (..)
     , ApiAccountKey (..)
     , ApiAccountPublicKey (..)
     , ApiActiveSharedWallet (..)
@@ -156,6 +158,10 @@ import Cardano.Wallet.Gen
     , genTxMetadata
     , shrinkPercentage
     , shrinkTxMetadata
+    )
+
+import Cardano.Wallet.Primitive.Types.TokenPolicy.Gen
+    ( genTokenNameSmallRange
     )
 import Cardano.Wallet.Primitive.AddressDerivation
     ( DerivationIndex (..)
@@ -455,6 +461,7 @@ spec = parallel $ do
             jsonRoundtripAndGolden $ Proxy @ApiMaintenanceAction
             jsonRoundtripAndGolden $ Proxy @ApiMaintenanceActionPostData
             jsonRoundtripAndGolden $ Proxy @ApiAsset
+            jsonRoundtripAndGolden $ Proxy @(ForgeTokenData ('Testnet 0))
 
     describe "Textual encoding" $ do
         describe "Can perform roundtrip textual encoding & decoding" $ do
@@ -937,6 +944,17 @@ spec = parallel $ do
                     }
             in
                 x' === x .&&. show x' === show x
+        it "ForgeTokenData" $ property $ \x ->
+          let
+            x' = ForgeTokenData
+                 { forgePayments = forgePayments (x :: ForgeTokenData ('Testnet 0))
+                 , assetName = assetName (x :: ForgeTokenData ('Testnet 0))
+                 , passphrase = passphrase (x :: ForgeTokenData ('Testnet 0))
+                 , metadata = metadata (x :: ForgeTokenData ('Testnet 0))
+                 , timeToLive = timeToLive (x :: ForgeTokenData ('Testnet 0))
+                 }
+          in
+               x' === x .&&. show x' === show x
         it "PostTransactionFeeData" $ property $ \x ->
             let
                 x' = PostTransactionFeeData
@@ -1281,6 +1299,11 @@ instance Arbitrary Address where
     arbitrary = pure $ Address "<addr>"
 
 instance Arbitrary (Quantity "lovelace" Natural) where
+    shrink (Quantity 0) = []
+    shrink _ = [Quantity 0]
+    arbitrary = Quantity . fromIntegral <$> (arbitrary @Word8)
+
+instance Arbitrary (Quantity "token-unit" Natural) where
     shrink (Quantity 0) = []
     shrink _ = [Quantity 0]
     arbitrary = Quantity . fromIntegral <$> (arbitrary @Word8)
@@ -1764,6 +1787,17 @@ instance Arbitrary (PostTransactionData t) where
         <*> arbitrary
         <*> arbitrary
 
+instance Arbitrary (ForgeTokenData t) where
+  arbitrary = ForgeTokenData
+        <$> arbitrary
+        <*> (ApiT <$> genTokenNameSmallRange)
+        <*> arbitrary
+        <*> arbitrary
+        <*> arbitrary
+
+instance Arbitrary addr => Arbitrary (AddressForgeAmount addr) where
+  arbitrary = AddressForgeAmount <$> arbitrary <*> arbitrary
+
 instance Arbitrary ApiWithdrawalPostData where
     arbitrary = genericArbitrary
     shrink = genericShrink
@@ -2125,6 +2159,10 @@ instance ToSchema (PostTransactionData t) where
     declareNamedSchema _ = do
         addDefinition =<< declareSchemaForDefinition "TransactionMetadataValue"
         declareSchemaForDefinition "ApiPostTransactionData"
+
+instance ToSchema (ForgeTokenData t) where
+    declareNamedSchema _ = do
+        declareSchemaForDefinition "ApiForgeTokenData"
 
 instance ToSchema (PostTransactionFeeData t) where
     declareNamedSchema _ = do

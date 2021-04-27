@@ -116,6 +116,8 @@ import Cardano.Address.Script
     ( Cosigner (..) )
 import Cardano.Api
     ( AnyCardanoEra (..), CardanoEra (..), SerialiseAsCBOR (..) )
+import Cardano.Api.Typed
+    ( AnyCardanoEra (..), CardanoEra (..), SerialiseAsCBOR (..), AssetName(AssetName))
 import Cardano.BM.Tracing
     ( HasPrivacyAnnotation (..), HasSeverityAnnotation (..) )
 import Cardano.Mnemonic
@@ -3328,9 +3330,10 @@ forgeToken
     -> Handler (ApiTransaction n)
 forgeToken ctx genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
-    let outs = undefined
     let forgePayments = fmap (\(AddressForgeAmount (ApiT addr, _) amt) -> AddressForgeAmount addr amt) $ body ^. #forgePayments
-    let forgeAssetName = body ^. #assetName
+    -- let outs = (\(AddressForgeAmount addr (Quantity amt) -> TxOut addr (fromFlatList (Coin 0) [()])) <$> forgePayments
+    let outs = undefined
+    let forgeAssetName = (\(UnsafeTokenName name) -> AssetName name) $ body ^. #assetName . #getApiT
     let md = body ^? #metadata . traverse . #getApiT
     let mTTL = body ^? #timeToLive . traverse . #getQuantity
 

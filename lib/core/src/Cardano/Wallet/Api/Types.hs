@@ -2780,7 +2780,7 @@ instance ToJSON (ApiT SmashServer) where
 
 data ForgeTokenData (n :: NetworkDiscriminant) = ForgeTokenData
     { forgePayments :: !(NonEmpty (AddressForgeAmount (ApiT Address, Proxy n)))
-    , assetName :: !AssetName
+    , assetName :: !(ApiT W.TokenName)
     , passphrase :: !(ApiT (Passphrase "lenient"))
     , metadata :: !(Maybe (ApiT TxMetadata))
     , timeToLive :: !(Maybe (Quantity "second" NominalDiffTime))
@@ -2788,7 +2788,7 @@ data ForgeTokenData (n :: NetworkDiscriminant) = ForgeTokenData
 
 data AddressForgeAmount addr = AddressForgeAmount
   { address :: !addr
-  , amt :: !Cardano.Quantity
+  , amt :: !(Quantity "token-unit" Natural)
   } deriving stock (Eq, Generic, Show)
 
 newtype ForgeAmount = ForgeAmount
@@ -2798,6 +2798,14 @@ newtype ForgeAmount = ForgeAmount
     deriving stock (Eq, Generic)
     deriving (Show) via Quiet ForgeAmount
     deriving anyclass NFData
+
+data ForgeRequest
+  = Mint !Cardano.Quantity
+  | Burn !Cardano.Quantity
+
+-- next:
+-- mint: find first address in wallet and just sent tokens to that
+-- burn: say we want to send x tokens to an addr, use coin selection algorithm to find inputs, but then modify outputs to be mempty, instead burning inputs
 
 mintAmount :: ForgeAmount -> W.TokenMap
 mintAmount (ForgeAmount (This _burn))              = mempty
@@ -2830,7 +2838,7 @@ instance FromJSON a => FromJSON (AddressForgeAmount a) where
         prependFailure "parsing AddressForgeAmount failed, " $
         AddressForgeAmount
             <$> v .: "address"
-            <*> v .:? "forge" .!= mempty
+            <*> v .:? "forge" .!= (Quantity 0)
 
 instance ToJSON a => ToJSON (AddressForgeAmount a) where
     toJSON = genericToJSON defaultRecordTypeOptions

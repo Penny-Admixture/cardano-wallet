@@ -23,6 +23,8 @@ import Cardano.Mnemonic
     ( entropyToMnemonic, genEntropy, mnemonicToText )
 import Cardano.Wallet.Api.Types
     ( AddressAmount (..)
+    , ApiAddress
+    , ForgeTokenData (..)
     , ApiAsset (..)
     , ApiFee (..)
     , ApiT (..)
@@ -1013,6 +1015,28 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
             , expectField #expiresAt (`shouldSatisfy` isJust)
             ]
 
+    it "TRANSFORGE_MINT_01 - Mint tokens" $ \ctx -> runResourceT $ do
+      w <- emptyWallet ctx
+
+      addrs <- listAddresses @n ctx w
+      let destination = (addrs !! 1) ^. #id
+      let payload = Json [json|{
+                              "forge_payments": [{
+                                "address": #{destination},
+                                "amount": {
+                                    "quantity": 5
+                                }
+                              }],
+                              "passphrase": #{fixturePassphrase},
+                              "asset_name": "aaaa"
+                   }|]
+
+      r <- request @(ForgeTokenData n) ctx (Link.forgeToken w) Default payload
+
+      verify r
+        [ expectResponseCode HTTP.status202
+        ]
+      
     it "TRANSMETA_CREATE_01 - Transaction with metadata" $ \ctx -> runResourceT $ do
         (wa, wb) <- (,) <$> fixtureWallet ctx <*> emptyWallet ctx
         let amt = (minUTxOValue :: Natural)

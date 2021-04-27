@@ -1226,7 +1226,7 @@ mkUnsignedTx era ttl cs md wdrls certs fees mForgeAmt =
                 ]
 
             outs :: NE.NonEmpty (Cardano.TxOut Cardano.MaryEra)
-            outs = (\(AddressForgeAmount addr amt) -> Cardano.TxOut (toMaryAddr addr) $ Cardano.TxOutValue Cardano.MultiAssetInMaryEra (Cardano.valueFromList $ [(assetId, amt)])) <$> tos
+            outs = (\(AddressForgeAmount addr (Quantity amt)) -> Cardano.TxOut (toMaryAddr addr) $ Cardano.TxOutValue Cardano.MultiAssetInMaryEra (Cardano.valueFromList $ [(assetId, fromIntegral amt)])) <$> tos
           pure $ NE.toList outs
 
       left toErrMkTx $ Cardano.makeTransactionBody $ Cardano.TxBodyContent
