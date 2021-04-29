@@ -110,6 +110,7 @@ module Cardano.Wallet.Api.Server
 
 import Prelude
 
+import Cardano.Address.Script (KeyHash, Script(RequireSignatureOf))
 import Cardano.Address.Derivation
     ( XPrv, XPub, xpubPublicKey, xpubToBytes )
 import Cardano.Address.Script
@@ -268,6 +269,8 @@ import Cardano.Wallet.Primitive.AddressDerivation
     ( DelegationAddress (..)
     , Depth (..)
     , DerivationIndex (..)
+    , hashVerificationKey
+    , deriveVerificationKey
     , DerivationType (..)
     , HardDerivation (..)
     , Index (..)
@@ -276,7 +279,7 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , Passphrase (..)
     , PaymentAddress (..)
     , RewardAccount (..)
-    , Role
+    , Role(MultisigScript)
     , SoftDerivation (..)
     , WalletKey (..)
     , deriveRewardAccount
@@ -290,6 +293,7 @@ import Cardano.Wallet.Primitive.AddressDerivation.Icarus
     ( IcarusKey )
 import Cardano.Wallet.Primitive.AddressDerivation.Shelley
     ( ShelleyKey )
+import Cardano.Wallet.Primitive.AddressDiscovery.Script (keyHashFromAccXPubIx)
 import Cardano.Wallet.Primitive.AddressDiscovery
     ( CompareDiscovery
     , GenChange (ArgGenChange)
@@ -372,8 +376,9 @@ import Cardano.Wallet.Primitive.Types.TokenBundle
     ( Flat (..), TokenBundle (..) )
 import Cardano.Wallet.Primitive.Types.TokenMap
     ( AssetId (..) )
+import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( TokenName (..), TokenPolicyId (..), nullTokenName )
+    ( TokenName (..), TokenPolicyId (..), nullTokenName, tokenPolicyIdFromScript )
 import Cardano.Wallet.Primitive.Types.Tx
     ( TransactionInfo (TransactionInfo)
     , Tx (..)
@@ -391,6 +396,7 @@ import Cardano.Wallet.Registry
     , defaultWorkerAfter
     , workerResource
     )
+import Cardano.Wallet.Primitive.Types.TokenQuantity (TokenQuantity(TokenQuantity))
 import Cardano.Wallet.TokenMetadata
     ( TokenMetadataClient, fillMetadata )
 import Cardano.Wallet.Transaction
@@ -421,6 +427,7 @@ import Control.Tracer
     ( Tracer, contramap )
 import Data.Aeson
     ( (.=) )
+import Data.String (fromString)
 import Data.ByteString
     ( ByteString )
 import Data.Coerce
@@ -467,7 +474,6 @@ import Fmt
     ( blockListF, indentF, pretty )
 import GHC.Stack
     ( HasCallStack )
-import Cardano.Wallet.Api.Types (AddressForgeAmount(AddressForgeAmount))
 import Network.HTTP.Media.RenderHeader
     ( renderHeader )
 import Network.HTTP.Types.Header
@@ -520,6 +526,7 @@ import UnliftIO.Concurrent
 import UnliftIO.Exception
     ( IOException, bracket, throwIO, tryAnyDeep, tryJust )
 
+import qualified Cardano.Api.Typed as Cardano
 import qualified Cardano.Wallet as W
 import qualified Cardano.Wallet.Api.Types as Api
 import qualified Cardano.Wallet.Network as NW
@@ -3314,14 +3321,17 @@ instance HasSeverityAnnotation WalletEngineLog where
 forgeToken
     :: forall ctx s k n.
         ( ctx ~ ApiLayer s k
+        , s ~ SeqState n k
         , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
+        , WalletKey k
         , GenChange s
         , HardDerivation k
+        , SoftDerivation k
         , HasNetworkLayer ctx
         , IsOwned s k
         , Typeable n
         , Typeable s
-        , WalletKey k
+        , PaymentAddress n k
         )
     => ctx
     -> ArgGenChange s
@@ -3330,10 +3340,9 @@ forgeToken
     -> Handler (ApiTransaction n)
 forgeToken ctx genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
-    let forgePayments = fmap (\(AddressForgeAmount (ApiT addr, _) amt) -> AddressForgeAmount addr amt) $ body ^. #forgePayments
-    -- let outs = (\(AddressForgeAmount addr (Quantity amt) -> TxOut addr (fromFlatList (Coin 0) [()])) <$> forgePayments
-    let outs = undefined
-    let forgeAssetName = (\(UnsafeTokenName name) -> AssetName name) $ body ^. #assetName . #getApiT
+    let assetName = body ^. #assetName . #getApiT
+    let assetQty = (\(Quantity nat) -> TokenQuantity nat) $ body ^. #mintAmount
+    let derivationIndex = fromMaybe (DerivationIndex 0) $ fmap getApiT $ body ^. #monetaryPolicyPath
     let md = body ^? #metadata . traverse . #getApiT
     let mTTL = body ^? #timeToLive . traverse . #getQuantity
 
@@ -3341,14 +3350,45 @@ forgeToken ctx genChange (ApiT wid) body = do
         mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
 
     ttl <- liftIO $ W.getTxExpiry ti mTTL
-    let txCtx = defaultTransactionCtx
-            { txWithdrawal = wdrl
-            , txMetadata = md
-            , txTimeToLive = ttl
-            , txForgeAmount = Just (forgeAssetName, forgePayments)
-            }
 
     (sel, tx, txMeta, txTime) <- withWorkerCtx ctx wid liftE liftE $ \wrk -> do
+        -- In the HD-wallet, monetary policies are associated with
+        -- address indices under the account type "3" (MultiSigScript).
+        -- Each address index stores the key associated with a single
+        -- monetary policy.
+        --
+        -- e.g. m/1852(purpose)​/​1815(coin_type)/0(account)​/3/0 -> monetary policy 1
+        --      m/1852(purpose)​/​1815(coin_type)/0(account)​/3/1 -> monetary policy 2
+  
+        -- Get the public key of the monetary policy
+        addrXPub <- liftHandler $ W.derivePublicKey @_ @s @k @n wrk wid MultisigScript derivationIndex
+
+        -- Use that public key to generate a monetary policy
+        let
+          keyHash :: KeyHash
+          keyHash = hashVerificationKey @k (liftRawKey . getRawKey $ addrXPub)
+  
+          script :: Script KeyHash
+          script = RequireSignatureOf keyHash
+  
+          policyId :: TokenPolicyId
+          policyId = tokenPolicyIdFromScript script
+  
+          assetId :: AssetId
+          assetId = AssetId policyId assetName
+  
+        -- Transfer the minted assets to the payment address
+        -- associated with the monetary policy
+        let txout = TxOut (paymentAddress @n @k addrXPub) (TokenBundle.TokenBundle (Coin 0) (TokenMap.singleton assetId assetQty))
+        let outs = pure txout
+
+        let txCtx = defaultTransactionCtx
+                { txWithdrawal = wdrl
+                , txMetadata = md
+                , txTimeToLive = ttl
+                , txMintBurnAmount = Just $ (assetId, assetQty) :| []
+                }
+
         w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
         sel <- liftHandler
             $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)

@@ -39,6 +39,8 @@ import Prelude
 
 import Cardano.Address.Derivation
     ( XPrv )
+import Numeric.Natural
+    ( Natural )
 import Cardano.Api.Typed
     ( AnyCardanoEra, AssetName )
 import Cardano.Wallet.Primitive.AddressDerivation
@@ -69,13 +71,13 @@ import Cardano.Wallet.Primitive.Types.UTxOIndex
     ( UTxOIndex )
 import Data.ByteString
     ( ByteString )
+import Data.Quantity (Quantity)
 import Data.List.NonEmpty
     ( NonEmpty )
 import Data.Text
     ( Text )
 import GHC.Generics
     ( Generic )
-import Cardano.Wallet.Api.Types (AddressForgeAmount)
 
 data TransactionLayer k = TransactionLayer
     { mkTransaction
@@ -153,8 +155,8 @@ data TransactionCtx = TransactionCtx
     -- ^ Transaction expiry (TTL) slot.
     , txDelegationAction :: Maybe DelegationAction
     -- ^ An additional delegation to take.
-    , txForgeAmount :: Maybe (AssetName, NonEmpty (AddressForgeAmount Address))
-    -- ^ Amount to mint/burn, if this is a forging transaction.
+    , txMintBurnAmount :: Maybe (NonEmpty (AssetId, TokenQuantity))
+    -- ^ Amount to mint/burn.
     } deriving (Show, Eq)
 
 data Withdrawal
@@ -177,7 +179,7 @@ defaultTransactionCtx = TransactionCtx
     , txMetadata = Nothing
     , txTimeToLive = maxBound
     , txDelegationAction = Nothing
-    , txForgeAmount = Nothing
+    , txMintBurnAmount = Nothing
     }
 
 -- | Whether the user is attempting any particular delegation action.

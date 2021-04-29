@@ -80,6 +80,8 @@ module Cardano.Wallet
     , readRewardAccount
     , someRewardAccount
     , queryRewardBalance
+    , guardSoftIndex
+    , guardHardIndex
     , ErrWalletAlreadyExists (..)
     , ErrNoSuchWallet (..)
     , ErrListUTxOStatistics (..)
