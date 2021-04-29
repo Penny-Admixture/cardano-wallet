@@ -3342,7 +3342,7 @@ forgeToken ctx genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
     let assetName = body ^. #assetName . #getApiT
     let assetQty = (\(Quantity nat) -> TokenQuantity nat) $ body ^. #mintAmount
-    let derivationIndex = fromMaybe (DerivationIndex 0) $ fmap getApiT $ body ^. #monetaryPolicyPath
+    let derivationIndex = fromMaybe (DerivationIndex 0) $ fmap getApiT $ body ^. #monetaryPolicyIndex
     let md = body ^? #metadata . traverse . #getApiT
     let mTTL = body ^? #timeToLive . traverse . #getQuantity
 
@@ -3376,17 +3376,20 @@ forgeToken ctx genChange (ApiT wid) body = do
   
           assetId :: AssetId
           assetId = AssetId policyId assetName
+
+          payAddrXPub :: Address
+          payAddrXPub = paymentAddress @n @k addrXPub
   
         -- Transfer the minted assets to the payment address
         -- associated with the monetary policy
-        let txout = TxOut (paymentAddress @n @k addrXPub) (TokenBundle.TokenBundle (Coin 0) (TokenMap.singleton assetId assetQty))
+        let txout = TxOut payAddrXPub (TokenBundle.TokenBundle (Coin 0) (TokenMap.singleton assetId assetQty))
         let outs = pure txout
 
         let txCtx = defaultTransactionCtx
                 { txWithdrawal = wdrl
                 , txMetadata = md
                 , txTimeToLive = ttl
-                , txMintBurnAmount = Just $ (assetId, assetQty) :| []
+                , txMintBurnInfo = Just outs
                 }
 
         w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
