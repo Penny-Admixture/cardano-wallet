@@ -47,7 +47,8 @@ import Prelude
 
 import Cardano.Address.Derivation
     ( XPrv, toXPub )
-import Cardano.Api
+import Data.List (nub)
+import Cardano.Api.Typed
     ( AnyCardanoEra (..)
     , SimpleScript(RequireSignature)
     , ByronEra
@@ -279,7 +280,7 @@ mkTx
     -- ^ Finalized asset selection
     -> Coin
     -- ^ Explicit fee amount
-    -> Maybe (NE.NonEmpty TxOut)
+    -> Maybe (NE.NonEmpty (Address, TokenMap))
     -> ShelleyBasedEra era
     -> Either ErrMkTx (Tx, SealedTx)
 mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts era = do
@@ -302,7 +303,19 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts
                     | otherwise =
                       [mkShelleyWitness unsigned (rewardAcnt, pwdAcnt)]
 
-            pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits
+            mintBurnWits <- do
+              let
+                list :: [(Address, TokenMap)]
+                list = maybe [] (NE.toList) mForgeOuts
+
+                uniqueAddrs :: [Address]
+                uniqueAddrs = nub . fmap fst $ list
+
+              forM uniqueAddrs $ \addr -> do
+                (k, pwd) <- lookupPrivateKey keyFrom addr
+                pure $ mkShelleyWitness unsigned (getRawKey k, pwd)
+
+            pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits <> mintBurnWits
 
         TxWitnessByronUTxO{} -> do
             bootstrapWits <- forM (inputsSelected cs) $ \(_, TxOut addr _) -> do
@@ -476,7 +489,7 @@ _initSelectionCriteria pp ctx utxoAvailable outputsUnprepared
                 }
     | otherwise =
         pure SelectionCriteria
-            {outputsToCover, utxoAvailable, selectionLimit, extraCoinSource}
+            {outputsToCover, utxoAvailable, selectionLimit, extraCoinSource, mintInputs}
   where
     -- The complete list of token bundles whose serialized lengths are greater
     -- than the limit of what is allowed in a transaction output:
@@ -514,6 +527,11 @@ _initSelectionCriteria pp ctx utxoAvailable outputsUnprepared
 
     selectionLimit = MaximumInputLimit $
         _estimateMaxNumberOfInputs @k txMaxSize ctx (NE.toList outputsToCover)
+
+    mintInputs :: TokenMap
+    mintInputs = case txMintBurnInfo ctx of
+      Nothing -> mempty
+      Just is -> foldMap (\(addr, tokens) -> tokens) is
 
     extraCoinSource = Just $ addCoin
         (withdrawalToCoin $ view #txWithdrawal ctx)
@@ -734,12 +752,18 @@ estimateTxSize skeleton =
     TxSkeleton
         { txMetadata
         , txDelegationAction
+<<<<<<< variant A
         , txRewardWithdrawal
         , txWitnessTag
         , txInputCount
         , txOutputs
         , txChange
         } = skeleton
+>>>>>>> variant B
+        , txWithdrawal
+        , txMintBurnInfo
+        } = ctx
+======= end
 
     numberOf_Inputs
         = fromIntegral txInputCount
@@ -750,6 +774,17 @@ estimateTxSize skeleton =
     numberOf_Withdrawals
         = if txRewardWithdrawal > Coin 0 then 1 else 0
 
+    numberOf_MintBurnVkeyWitnesses
+      = fromIntegral $ case txMintBurnInfo of
+          Nothing
+            -> 0
+          -- Count the (unique) addresses that will need to mint/burn
+          -- some tokens, and hence must sign the transaction (i.e. be
+          -- a witness). Unique because someone minting/burning
+          -- multiple assets need only sign the transaction once.
+          Just (is :: NE.NonEmpty (Address, TokenMap))
+            -> length . NE.nub . fmap fst $ is
+
     numberOf_VkeyWitnesses
         = case txWitnessTag of
             TxWitnessByronUTxO{} -> 0
@@ -757,6 +792,7 @@ estimateTxSize skeleton =
                 numberOf_Inputs
                 + numberOf_Withdrawals
                 + numberOf_CertificateSignatures
+                + numberOf_MintBurnVkeyWitnesses
 
     numberOf_BootstrapWitnesses
         = case txWitnessTag of
@@ -1098,7 +1134,7 @@ mkUnsignedTx
     -> [(Cardano.StakeAddress, Cardano.Lovelace)]
     -> [Cardano.Certificate]
     -> Cardano.Lovelace
-    -> Maybe (NE.NonEmpty TxOut)
+    -> Maybe (NE.NonEmpty (Address, TokenMap))
     -> Either ErrMkTx (Cardano.TxBody era)
 mkUnsignedTx era ttl cs md wdrls certs fees mForgeOuts =
     case era of
@@ -1232,7 +1268,7 @@ mkUnsignedTx era ttl cs md wdrls certs fees mForgeOuts =
               case mForgeOuts of
                 Nothing -> Cardano.TxMintNone
                 Just fs ->
-                  case foldMap (forgeOutAmt . toMaryTxOut) fs of
+                  case foldMap (\(addr, tokens) -> forgeOutAmt . toMaryTxOut $ TxOut addr (TokenBundle.fromTokenMap tokens)) fs of
                     amt | amt == mempty -> Cardano.TxMintNone
                     amt                 -> Cardano.TxMintValue Cardano.MultiAssetInMaryEra amt
         }

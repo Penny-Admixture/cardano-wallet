@@ -82,6 +82,7 @@ module Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
 
 import Prelude
 
+import Debug.Trace
 import Algebra.PartialOrd
     ( PartialOrd (..) )
 import Cardano.Numeric.Util
@@ -171,6 +172,9 @@ data SelectionCriteria = SelectionCriteria
     , extraCoinSource
         :: !(Maybe Coin)
         -- ^ An optional extra source of ada.
+    , mintInputs
+        :: !TokenMap
+        -- ^ When a token is minted, it provides an extra source of tokens.
     }
     deriving (Eq, Show)
 
@@ -429,7 +433,7 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
     | otherwise = do
         state <- runSelection
             selectionLimit extraCoinSource utxoAvailable balanceRequired
-        let balanceSelected = fullBalance (selected state) extraCoinSource
+        let balanceSelected = fullBalance (selected state) extraCoinSource mintInputs
         if balanceRequired `leq` balanceSelected then
             makeChangeRepeatedly state
 
@@ -444,6 +448,7 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
         , utxoAvailable
         , selectionLimit
         , extraCoinSource
+        , mintInputs
         } = criteria
 
     mkInputsSelected :: UTxOIndex -> NonEmpty (TxIn, TxOut)
@@ -451,7 +456,7 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
         fromMaybe invariantSelectAnyInputs . NE.nonEmpty . UTxOIndex.toList
 
     balanceAvailable :: TokenBundle
-    balanceAvailable = fullBalance utxoAvailable extraCoinSource
+    balanceAvailable = fullBalance utxoAvailable extraCoinSource mintInputs
 
     balanceRequired :: TokenBundle
     balanceRequired = F.foldMap (view #tokens) outputsToCover
@@ -513,6 +518,7 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
             , extraCoinSource
             , inputBundles
             , outputBundles
+            , mintInputs
             }
         )
       where
@@ -577,6 +583,7 @@ performSelection minCoinFor costFor bundleSizeAssessor criteria
             , extraCoinSource
             , inputBundles =  view #tokens . snd <$> inputsSelected
             , outputBundles = view #tokens <$> outputsToCover
+            , mintInputs
             }
 
         mkSelectionResult :: [TokenBundle] -> SelectionResult TokenBundle
@@ -833,6 +840,8 @@ data MakeChangeCriteria minCoinFor bundleSizeAssessor = MakeChangeCriteria
         -- ^ Token bundles of selected inputs.
     , outputBundles :: NonEmpty TokenBundle
         -- ^ Token bundles of original outputs.
+    , mintInputs :: TokenMap
+        -- ^ Minted tokens provide an additional source of tokens.
     } deriving (Eq, Generic, Show)
 
 -- | Indicates 'True' if and only if a token bundle exceeds the maximum size
@@ -872,7 +881,7 @@ makeChange
         -- ^ Generated change bundles.
 makeChange criteria
     | not (totalOutputValue `leq` totalInputValue) =
-        totalInputValueInsufficient
+        trace (show (totalInputValue, totalOutputValue)) totalInputValueInsufficient
     | TokenBundle.getCoin totalOutputValue == Coin 0 =
         totalOutputCoinValueIsZero
     | otherwise =
@@ -888,6 +897,7 @@ makeChange criteria
         , extraCoinSource
         , inputBundles
         , outputBundles
+        , mintInputs
         } = criteria
 
     -- The following subtraction is safe, as we have already checked
@@ -1012,8 +1022,10 @@ makeChange criteria
 
     totalInputValue :: TokenBundle
     totalInputValue = TokenBundle.add
+      (TokenBundle.add
         (F.fold inputBundles)
-        (maybe TokenBundle.empty TokenBundle.fromCoin extraCoinSource)
+        (maybe TokenBundle.empty TokenBundle.fromCoin extraCoinSource))
+      (TokenBundle.fromTokenMap mintInputs)
 
     totalOutputValue :: TokenBundle
     totalOutputValue = F.fold outputBundles
@@ -1333,17 +1345,19 @@ assetQuantity asset =
     unTokenQuantity . flip TokenBundle.getQuantity asset . view #balance
 
 coinQuantity :: UTxOIndex -> Maybe Coin -> Natural
-coinQuantity index =
-    fromIntegral . unCoin . TokenBundle.getCoin . fullBalance index
+coinQuantity index extraSource =
+    fromIntegral . unCoin . TokenBundle.getCoin $ fullBalance index extraSource mempty
 
-fullBalance :: UTxOIndex -> Maybe Coin -> TokenBundle
-fullBalance index extraSource
+fullBalance :: UTxOIndex -> Maybe Coin -> TokenMap -> TokenBundle
+fullBalance index extraSource mintInputs
     | UTxOIndex.null index =
         TokenBundle.empty
     | otherwise =
         TokenBundle.add
-            (view #balance index)
-            (maybe TokenBundle.empty TokenBundle.fromCoin extraSource)
+          (TokenBundle.add
+              (view #balance index)
+              (maybe TokenBundle.empty TokenBundle.fromCoin extraSource))
+          (TokenBundle.fromTokenMap mintInputs)
 
 --------------------------------------------------------------------------------
 -- Utility types

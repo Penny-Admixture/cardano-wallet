@@ -75,6 +75,7 @@ module Cardano.Wallet.Primitive.AddressDiscovery.Sequential
     ) where
 
 import Prelude
+import Debug.Trace
 
 import Cardano.Address.Derivation
     ( xpubPublicKey )

@@ -327,6 +327,7 @@ import Cardano.Wallet.Primitive.AddressDiscovery.SharedState
     )
 import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
     ( SelectionError (..)
+    , SelectionResult(outputsCovered)
     , SelectionInsufficientError (..)
     , UnableToConstructChangeError (..)
     , balanceMissing
@@ -488,6 +489,7 @@ import Network.Wai.Handler.Warp
     ( Port )
 import Network.Wai.Middleware.Logging
     ( ApiLog (..), newApiLoggerSettings, obfuscateKeys, withApiLogger )
+import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin ( SelectionCriteria(..) )
 import Network.Wai.Middleware.ServerError
     ( handleRawError )
 import Numeric.Natural
@@ -3382,21 +3384,34 @@ forgeToken ctx genChange (ApiT wid) body = do
   
         -- Transfer the minted assets to the payment address
         -- associated with the monetary policy
-        let txout = TxOut payAddrXPub (TokenBundle.TokenBundle (Coin 0) (TokenMap.singleton assetId assetQty))
+        let assets = TokenMap.singleton assetId assetQty
+        let txout = TxOut payAddrXPub (TokenBundle.TokenBundle (Coin 0) assets)
         let outs = pure txout
+        -- let outs = fmap (\(TxOut addr (TokenBundle.TokenBundle coin tokens)) -> TxOut addr (TokenBundle.TokenBundle coin mempty)) (pure txout)
 
         let txCtx = defaultTransactionCtx
                 { txWithdrawal = wdrl
                 , txMetadata = md
                 , txTimeToLive = ttl
-                , txMintBurnInfo = Just outs
+                , txMintBurnInfo = Just (pure (payAddrXPub, assets) :: NonEmpty (Address, TokenMap.TokenMap))
                 }
 
         w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
+        liftIO $ putStrLn $ "Starting SEL..."
         sel <- liftHandler
             $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)
+        liftIO $ putStrLn $ "Finished SEL"
+        liftIO $ putStrLn $ show sel
+
+        -- let outputsCovered' = fmap (\txout -> case txout of
+        --          (TxOut addr (TokenBundle.TokenBundle coin tokens)) | addr == payAddrXPub && tokens == mempty -> TxOut addr (TokenBundle.TokenBundle coin (TokenMap.singleton assetId assetQty))
+        --          otherwise -> txout
+        --          ) (outputsCovered sel)
+
         (tx, txMeta, txTime, sealedTx) <- liftHandler
             $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+        liftIO $ putStrLn $ "Finished SIGN"
+        liftIO $ putStrLn $ show tx
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)

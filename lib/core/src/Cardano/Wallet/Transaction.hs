@@ -155,7 +155,7 @@ data TransactionCtx = TransactionCtx
     -- ^ Transaction expiry (TTL) slot.
     , txDelegationAction :: Maybe DelegationAction
     -- ^ An additional delegation to take.
-    , txMintBurnInfo :: Maybe (NonEmpty TxOut)
+    , txMintBurnInfo :: Maybe (NonEmpty (Address, TokenMap))
     -- ^ Mint/burn transactions.
     } deriving (Show, Eq)
 
