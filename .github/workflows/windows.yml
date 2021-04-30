@@ -117,3 +117,18 @@ jobs:
         if: github.ref == 'ref/heads/master'
         shell: bash
         run: 'bash .buildkite/push-branch.sh windows-tests-pass linux-tests-pass all-tests-pass'
+
+  notify:
+    name: Notify slack channel
+    runs-on: ubuntu-latest
+    if: ${{ always() && (github.ref == 'refs/heads/master' || github.ref == 'refs/tags/v' || github.ref == 'rvl/adp-753/ci-notify') }}
+    steps:
+      - uses: act10ns/slack@v1
+        with:
+          status: ${{ job.status }}
+          steps: ${{ toJson(steps) }}
+          channel: '#adrestia-secret-fort'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        # TODO: ADP-753 only notify when state changes between failure/success
+        if: ${{ failure() }}
