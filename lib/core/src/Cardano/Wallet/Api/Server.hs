@@ -110,6 +110,7 @@ module Cardano.Wallet.Api.Server
 
 import Prelude
 
+import Cardano.Wallet.DB.Sqlite.Types ()
 import Cardano.Address.Script (KeyHash, Script(RequireSignatureOf))
 import Cardano.Address.Derivation
     ( XPrv, XPub, xpubPublicKey, xpubToBytes )
@@ -1735,7 +1736,7 @@ postTransaction ctx genChange (ApiT wid) body = do
         sel <- liftHandler
             $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel Nothing
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)
@@ -1893,7 +1894,7 @@ joinStakePool ctx knownPools getPoolStatus apiPoolId (ApiT wid) body = do
             $ W.selectAssetsNoOutputs @_ @s @k wrk wid wal txCtx
             $ const Prelude.id
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel Nothing
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -1976,7 +1977,7 @@ quitStakePool ctx (ApiT wid) body = do
             $ W.selectAssetsNoOutputs @_ @s @k wrk wid wal txCtx
             $ const Prelude.id
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel Nothing
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -3323,6 +3324,7 @@ forgeToken
         ( ctx ~ ApiLayer s k
         , s ~ SeqState n k
         , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
+        , AddressIndexDerivationType k ~ 'Soft
         , WalletKey k
         , GenChange s
         , HardDerivation k
@@ -3332,6 +3334,8 @@ forgeToken
         , Typeable n
         , Typeable s
         , PaymentAddress n k
+        , CompareDiscovery s
+        , KnownAddresses s
         )
     => ctx
     -> ArgGenChange s
@@ -3362,6 +3366,7 @@ forgeToken ctx genChange (ApiT wid) body = do
   
         -- Get the public key of the monetary policy
         addrXPub <- liftHandler $ W.derivePublicKey @_ @s @k @n wrk wid MultisigScript derivationIndex
+        addrXPrv <- liftHandler $ W.derivePrivateKey @_ @s @k @n wrk wid pwd (MultisigScript, derivationIndex)
 
         -- Use that public key to generate a monetary policy
         let
@@ -3380,6 +3385,8 @@ forgeToken ctx genChange (ApiT wid) body = do
           payAddrXPub :: Address
           payAddrXPub = paymentAddress @n @k addrXPub
   
+        liftIO $ putStrLn $ T.unpack $ toText keyHash
+
         -- Transfer the minted assets to the payment address
         -- associated with the monetary policy
         let assets = TokenMap.singleton assetId assetQty
@@ -3395,11 +3402,11 @@ forgeToken ctx genChange (ApiT wid) body = do
                 }
 
         w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
-        liftIO $ putStrLn $ "Starting SEL..."
+        -- liftIO $ putStrLn $ "Starting SEL..."
         sel <- liftHandler
             $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)
-        liftIO $ putStrLn $ "Finished SEL"
-        liftIO $ putStrLn $ show sel
+        -- liftIO $ putStrLn $ "Finished SEL"
+        -- liftIO $ putStrLn $ show sel
 
         -- let outputsCovered' = fmap (\txout -> case txout of
         --          (TxOut addr (TokenBundle.TokenBundle coin tokens)) | addr == payAddrXPub && tokens == mempty -> TxOut addr (TokenBundle.TokenBundle coin (TokenMap.singleton assetId assetQty))
@@ -3407,9 +3414,9 @@ forgeToken ctx genChange (ApiT wid) body = do
         --          ) (outputsCovered sel)
 
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
-        liftIO $ putStrLn $ "Finished SIGN"
-        liftIO $ putStrLn $ show tx
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel (Just addrXPrv)
+        -- liftIO $ putStrLn $ "Finished SIGN"
+        -- liftIO $ putStrLn $ show tx
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)

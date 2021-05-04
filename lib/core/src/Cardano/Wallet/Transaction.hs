@@ -94,6 +94,8 @@ data TransactionLayer k = TransactionLayer
         -> SelectionResult TxOut
             -- A balanced coin selection where all change addresses have been
             -- assigned.
+        -> Maybe (k 'AddressK XPrv, Passphrase "encryption")
+            -- Extra witness
         -> Either ErrMkTx (Tx, SealedTx)
         -- ^ Construct a standard transaction
         --

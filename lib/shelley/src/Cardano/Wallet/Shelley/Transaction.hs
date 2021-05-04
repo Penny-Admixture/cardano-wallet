@@ -281,9 +281,10 @@ mkTx
     -> Coin
     -- ^ Explicit fee amount
     -> Maybe (NE.NonEmpty (Address, TokenMap))
+    -> Maybe (k 'AddressK XPrv, Passphrase "encryption")
     -> ShelleyBasedEra era
     -> Either ErrMkTx (Tx, SealedTx)
-mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts era = do
+mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts extraWit era = do
     let TxPayload md certs mkExtraWits = payload
     let wdrls = mkWithdrawals
             networkId
@@ -304,16 +305,18 @@ mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts
                       [mkShelleyWitness unsigned (rewardAcnt, pwdAcnt)]
 
             mintBurnWits <- do
-              let
-                list :: [(Address, TokenMap)]
-                list = maybe [] (NE.toList) mForgeOuts
+            --   let
+            --     list :: [(Address, TokenMap)]
+            --     list = maybe [] (NE.toList) mForgeOuts
 
-                uniqueAddrs :: [Address]
-                uniqueAddrs = nub . fmap fst $ list
+            --     uniqueAddrs :: [Address]
+            --     uniqueAddrs = nub . fmap fst $ list
 
-              forM uniqueAddrs $ \addr -> do
-                (k, pwd) <- lookupPrivateKey keyFrom addr
-                pure $ mkShelleyWitness unsigned (getRawKey k, pwd)
+            --   forM uniqueAddrs $ \addr -> do
+            --     (k, pwd) <- lookupPrivateKey keyFrom addr
+                pure $ case extraWit of
+                  Nothing -> []
+                  Just (wit, pwd) -> [mkShelleyWitness unsigned (getRawKey wit, pwd)]
 
             pure $ mkExtraWits unsigned <> F.toList addrWits <> wdrlsWits <> mintBurnWits
 
@@ -340,7 +343,7 @@ newTransactionLayer
     => NetworkId
     -> TransactionLayer k
 newTransactionLayer networkId = TransactionLayer
-    { mkTransaction = \era stakeCreds keystore pp ctx selection -> do
+    { mkTransaction = \era stakeCreds keystore pp ctx selection extraWit -> do
         let ttl   = txTimeToLive ctx
         let wdrl  = withdrawalToCoin $ view #txWithdrawal ctx
         let delta = selectionDelta txOutCoin selection
@@ -350,7 +353,7 @@ newTransactionLayer networkId = TransactionLayer
                 withShelleyBasedEra era $ do
                     let payload = TxPayload (view #txMetadata ctx) mempty mempty
                     let fees = delta
-                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge
+                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge extraWit
 
             Just action -> do
                 withShelleyBasedEra era $ do
@@ -365,7 +368,7 @@ newTransactionLayer networkId = TransactionLayer
                                 unsafeSubtractCoin selection delta (stakeKeyDeposit pp)
                             _ ->
                                 delta
-                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge
+                    mkTx networkId payload ttl stakeCreds keystore wdrl selection fees forge extraWit
 
     , initSelectionCriteria = _initSelectionCriteria @k
 
@@ -688,7 +691,7 @@ data TxSkeleton = TxSkeleton
     , txInputCount :: !Int
     , txOutputs :: ![TxOut]
     , txChange :: ![Set AssetId]
-    , txMintBurnInfo :: Maybe (NE.NonEmpty (Address, TokenMap))
+    , txMintBurnInfo :: !(Maybe (NE.NonEmpty (Address, TokenMap)))
     }
     deriving (Eq, Show)
 
@@ -705,6 +708,7 @@ emptyTxSkeleton txWitnessTag = TxSkeleton
     , txInputCount = 0
     , txOutputs = []
     , txChange = []
+    , txMintBurnInfo = Nothing
     }
 
 -- | Constructs a transaction skeleton from wallet primitive types.

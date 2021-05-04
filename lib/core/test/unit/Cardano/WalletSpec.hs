@@ -1082,7 +1082,7 @@ setupFixture (wid, wname, wstate) = do
 -- implements a fake signer that still produces sort of witnesses
 dummyTransactionLayer :: TransactionLayer ShelleyKey
 dummyTransactionLayer = TransactionLayer
-    { mkTransaction = \_era _stakeCredentials keystore _pp _ctx cs -> do
+    { mkTransaction = \_era _stakeCredentials keystore _pp _ctx cs extraWit -> do
         let inps' = NE.toList $ second txOutCoin <$> inputsSelected cs
         let tid = mkTxId inps' (outputsCovered cs) mempty Nothing
         let tx = Tx tid Nothing inps' (outputsCovered cs) mempty Nothing
