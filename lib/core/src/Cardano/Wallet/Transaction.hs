@@ -157,7 +157,7 @@ data TransactionCtx = TransactionCtx
     -- ^ An additional delegation to take.
     , txMintBurnInfo :: Maybe (NonEmpty (Address, TokenMap))
     -- ^ Mint/burn transactions.
-    } deriving (Show, Eq)
+    } deriving (Show, Generic, Eq)
 
 data Withdrawal
     = WithdrawalSelf !RewardAccount !(NonEmpty DerivationIndex) !Coin

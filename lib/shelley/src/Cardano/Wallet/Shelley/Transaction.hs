@@ -344,8 +344,8 @@ newTransactionLayer networkId = TransactionLayer
         let ttl   = txTimeToLive ctx
         let wdrl  = withdrawalToCoin $ view #txWithdrawal ctx
         let delta = selectionDelta txOutCoin selection
-        let forge = txMintBurnInfo ctx
-        case txDelegationAction ctx of
+        let forge = view #txMintBurnInfo ctx
+        case view #txDelegationAction ctx of
             Nothing -> do
                 withShelleyBasedEra era $ do
                     let payload = TxPayload (view #txMetadata ctx) mempty mempty
@@ -529,7 +529,7 @@ _initSelectionCriteria pp ctx utxoAvailable outputsUnprepared
         _estimateMaxNumberOfInputs @k txMaxSize ctx (NE.toList outputsToCover)
 
     mintInputs :: TokenMap
-    mintInputs = case txMintBurnInfo ctx of
+    mintInputs = case view #txMintBurnInfo ctx of
       Nothing -> mempty
       Just is -> foldMap (\(addr, tokens) -> tokens) is
 
@@ -688,6 +688,7 @@ data TxSkeleton = TxSkeleton
     , txInputCount :: !Int
     , txOutputs :: ![TxOut]
     , txChange :: ![Set AssetId]
+    , txMintBurnInfo :: Maybe (NE.NonEmpty (Address, TokenMap))
     }
     deriving (Eq, Show)
 
@@ -724,6 +725,7 @@ mkTxSkeleton witness context skeleton = TxSkeleton
     , txInputCount = view #skeletonInputCount skeleton
     , txOutputs = view #skeletonOutputs skeleton
     , txChange = view #skeletonChange skeleton
+    , txMintBurnInfo = view #txMintBurnInfo context
     }
 
 -- | Estimates the final cost of a transaction based on its skeleton.
@@ -757,6 +759,7 @@ estimateTxSize skeleton =
         , txInputCount
         , txOutputs
         , txChange
+        , txMintBurnInfo
         } = skeleton
 
     numberOf_Inputs
