@@ -116,8 +116,6 @@ import Cardano.Address.Derivation
 import Cardano.Address.Script
     ( Cosigner (..) )
 import Cardano.Api
-    ( AnyCardanoEra (..), CardanoEra (..), SerialiseAsCBOR (..) )
-import Cardano.Api.Typed
     ( AnyCardanoEra (..), CardanoEra (..), SerialiseAsCBOR (..), AssetName(AssetName))
 import Cardano.BM.Tracing
     ( HasPrivacyAnnotation (..), HasSeverityAnnotation (..) )
@@ -528,7 +526,7 @@ import UnliftIO.Concurrent
 import UnliftIO.Exception
     ( IOException, bracket, throwIO, tryAnyDeep, tryJust )
 
-import qualified Cardano.Api.Typed as Cardano
+import qualified Cardano.Api as Cardano
 import qualified Cardano.Wallet as W
 import qualified Cardano.Wallet.Api.Types as Api
 import qualified Cardano.Wallet.Network as NW
@@ -3329,7 +3327,7 @@ forgeToken
         , GenChange s
         , HardDerivation k
         , SoftDerivation k
-        , HasNetworkLayer ctx
+        , HasNetworkLayer IO ctx
         , IsOwned s k
         , Typeable n
         , Typeable s

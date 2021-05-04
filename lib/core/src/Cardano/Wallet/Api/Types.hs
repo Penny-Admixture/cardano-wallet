@@ -203,7 +203,7 @@ import Cardano.Api
     , metadataFromJson
     , metadataToJson
     )
-import qualified Cardano.Api.Typed as Cardano (Quantity)
+import qualified Cardano.Api as Cardano (Quantity)
 import Cardano.Mnemonic
     ( MkSomeMnemonic (..)
     , MkSomeMnemonicError (..)

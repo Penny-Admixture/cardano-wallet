@@ -48,7 +48,7 @@ import Prelude
 import Cardano.Address.Derivation
     ( XPrv, toXPub )
 import Data.List (nub)
-import Cardano.Api.Typed
+import Cardano.Api
     ( AnyCardanoEra (..)
     , SimpleScript(RequireSignature)
     , ByronEra
@@ -95,7 +95,7 @@ import Cardano.Wallet.Primitive.Types.TokenMap
 import Cardano.Wallet.Primitive.Types.TokenPolicy
     ( TokenName (..), TokenPolicyId(..))
 import Cardano.Wallet.Primitive.Types.TokenQuantity
-    ( TokenQuantity, unTokenQuantity )
+    ( TokenQuantity(TokenQuantity), unTokenQuantity )
 import Data.String (fromString)
 import Data.Maybe
     ( fromMaybe )
@@ -180,7 +180,7 @@ import Ouroboros.Network.Block
 import qualified Cardano.Api as Cardano
 import qualified Cardano.Api.Byron as Byron
 import qualified Cardano.Api.Shelley as Cardano
-import qualified Cardano.Api.Typed as Cardano
+import qualified Cardano.Api as Cardano
 import qualified Data.Map.Strict as M
 import qualified Data.Bifunctor as Bifunctor
 import qualified Cardano.Chain.Common as Byron
@@ -752,18 +752,12 @@ estimateTxSize skeleton =
     TxSkeleton
         { txMetadata
         , txDelegationAction
-<<<<<<< variant A
         , txRewardWithdrawal
         , txWitnessTag
         , txInputCount
         , txOutputs
         , txChange
         } = skeleton
->>>>>>> variant B
-        , txWithdrawal
-        , txMintBurnInfo
-        } = ctx
-======= end
 
     numberOf_Inputs
         = fromIntegral txInputCount

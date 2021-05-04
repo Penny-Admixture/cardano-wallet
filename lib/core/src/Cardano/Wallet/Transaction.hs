@@ -41,7 +41,7 @@ import Cardano.Address.Derivation
     ( XPrv, XPub )
 import Numeric.Natural
     ( Natural )
-import Cardano.Api.Typed
+import Cardano.Api
     ( AnyCardanoEra, AssetName )
 import Cardano.Wallet.Primitive.AddressDerivation
     ( Depth (..), DerivationIndex, Passphrase, Index, DerivationType(Soft) )
@@ -56,7 +56,7 @@ import Cardano.Wallet.Primitive.Types.Coin
 import Cardano.Wallet.Primitive.Types.RewardAccount
     ( RewardAccount )
 import Cardano.Wallet.Primitive.Types.TokenMap
-    ( AssetId )
+    ( AssetId, TokenMap )
 import Cardano.Wallet.Primitive.Types.TokenQuantity
     ( TokenQuantity )
 import Cardano.Wallet.Primitive.Types.Tx
