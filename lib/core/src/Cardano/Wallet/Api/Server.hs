@@ -113,7 +113,7 @@ import Prelude
 import Cardano.Address.Derivation
     ( XPrv, XPub, xpubPublicKey, xpubToBytes )
 import Cardano.Address.Script
-    ( Cosigner (..), KeyHash, Script (RequireSignatureOf) )
+    ( Cosigner (..), KeyHash, KeyRole (..), Script (RequireSignatureOf) )
 import Cardano.Api
     ( AnyCardanoEra (..)
     , AssetName (AssetName)
@@ -3384,7 +3384,7 @@ forgeToken ctx genChange (ApiT wid) body = do
           scriptXPub = publicKey $ fst policyKey
 
           vkeyHash :: KeyHash
-          vkeyHash = hashVerificationKey @k $ liftRawKey $ getRawKey scriptXPub
+          vkeyHash = hashVerificationKey @k Payment $ liftRawKey $ getRawKey scriptXPub
 
           script :: Script KeyHash
           script = RequireSignatureOf vkeyHash

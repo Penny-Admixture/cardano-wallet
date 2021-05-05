@@ -507,10 +507,11 @@ deriveVerificationKey accXPub =
 
 hashVerificationKey
     :: WalletKey k
-    => k 'ScriptK XPub
+    => KeyRole
+    -> k 'ScriptK XPub
     -> KeyHash
-hashVerificationKey =
-    KeyHash Payment . blake2b224 . xpubPublicKey . getRawKey
+hashVerificationKey r =
+    KeyHash r . blake2b224 . xpubPublicKey . getRawKey
 
 {-------------------------------------------------------------------------------
                                  Passphrases
