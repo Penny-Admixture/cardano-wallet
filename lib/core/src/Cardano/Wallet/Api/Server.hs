@@ -3354,13 +3354,14 @@ forgeToken
     -> ApiT WalletId
     -> Api.ForgeTokenData n
     -> Handler (ApiTransaction n)
-forgeToken ctx addr genChange (ApiT wid) body = do
+forgeToken ctx genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
     let assetName = body ^. #assetName . #getApiT
     let assetQty = (\(Quantity nat) -> TokenQuantity nat) $ body ^. #mintAmount
     let derivationIndex = fromMaybe (DerivationIndex 0) $ fmap getApiT $ body ^. #monetaryPolicyIndex
     let md = body ^? #metadata . traverse . #getApiT
     let mTTL = body ^? #timeToLive . traverse . #getQuantity
+    let addr = body ^? #address
 
     (wdrl, mkRwdAcct) <-
         mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing

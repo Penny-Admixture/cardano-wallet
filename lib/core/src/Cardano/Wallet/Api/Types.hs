@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -24,7 +25,6 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE DerivingVia #-}
 
 -- |
 -- Copyright: © 2018-2020 IOHK
@@ -197,13 +197,14 @@ import Cardano.Address.Derivation
 import Cardano.Address.Script
     ( Cosigner (..), KeyHash, Script, ScriptTemplate, ValidationLevel (..) )
 import Cardano.Api
-    ( TxMetadataJsonSchema (..)
-    , AssetName
+    ( AssetName
+    , TxMetadataJsonSchema (..)
     , displayError
     , metadataFromJson
     , metadataToJson
     )
-import qualified Cardano.Api as Cardano (Quantity)
+import qualified Cardano.Api as Cardano
+    ( Quantity )
 import Cardano.Mnemonic
     ( MkSomeMnemonic (..)
     , MkSomeMnemonicError (..)
@@ -364,11 +365,12 @@ import GHC.TypeLits
     ( Nat, Symbol )
 import Numeric.Natural
     ( Natural )
+import Quiet
+    ( Quiet (..) )
 import Servant.API
     ( MimeRender (..), MimeUnrender (..), OctetStream )
 import Web.HttpApiData
     ( FromHttpApiData (..), ToHttpApiData (..) )
-import Quiet (Quiet (..))
 
 import qualified Cardano.Crypto.Wallet as CC
 import qualified Cardano.Wallet.Primitive.AddressDerivation as AD
@@ -2773,7 +2775,8 @@ instance ToJSON (ApiT SmashServer) where
 -------------------------------------------------------------------------------}
 
 data ForgeTokenData (n :: NetworkDiscriminant) = ForgeTokenData
-    { assetName :: !(ApiT W.TokenName)
+    { address :: !(ApiT W.Address)
+    , assetName :: !(ApiT W.TokenName)
     , mintAmount :: !(Quantity "assets" Natural)
     , monetaryPolicyIndex :: !(Maybe (ApiT DerivationIndex))
     , passphrase :: !(ApiT (Passphrase "lenient"))
