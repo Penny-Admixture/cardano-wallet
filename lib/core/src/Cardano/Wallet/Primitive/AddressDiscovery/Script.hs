@@ -43,12 +43,11 @@ import Cardano.Address.Script
     , ScriptTemplate (..)
     , toScriptHash
     )
+import Cardano.Address.Style.Shared
+    ( deriveAddressPublicKey, deriveDelegationPublicKey, hashKey )
 import Cardano.Address.Style.Shelley
     ( Credential (..)
     , delegationAddress
-    , deriveMultisigForDelegationPublicKey
-    , deriveMultisigForPaymentPublicKey
-    , hashKey
     , liftXPub
     , mkNetworkDiscriminant
     , paymentAddress
@@ -144,8 +143,8 @@ replaceCosignersWithVerKeys role (ScriptTemplate xpubs scriptTemplate) ix =
             verKey = deriveMultisigPublicKey accXPub (convertIndex ix)
         in hashKey verKey
     deriveMultisigPublicKey = case role of
-        CA.MultisigForPayment -> deriveMultisigForPaymentPublicKey
-        CA.MultisigForDelegation -> deriveMultisigForDelegationPublicKey
+        CA.MultisigForPayment -> deriveAddressPublicKey
+        CA.MultisigForDelegation -> deriveDelegationPublicKey
         _ ->  error "replaceCosignersWithVerKeys is supported only for role=3 and role=4"
 
 toNetworkTag

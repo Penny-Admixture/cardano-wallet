@@ -2145,7 +2145,7 @@ derivePublicKey ctx wid role_ ix = db & \DBLayer{..} -> do
   where
     db = ctx ^. dbLayer @IO @s @k
 
-derivePrivateKey 
+derivePrivateKey
     :: forall ctx s k n.
         ( HasDBLayer IO s k ctx
         , HardDerivation k
@@ -2156,7 +2156,7 @@ derivePrivateKey
     -> WalletId
     -> Passphrase "raw"
     -> (Role, DerivationIndex)
-    -> ExceptT ErrSignMetadataWith IO (k 'AddressK XPrv, Passphrase "encryption")
+    -> ExceptT ErrSignMetadataWith IO (k 'ScriptK XPrv, Passphrase "encryption")
 derivePrivateKey ctx wid pwd (role_, ix) = db & \DBLayer{..} -> do
     addrIx <- withExceptT ErrSignMetadataWithInvalidIndex $ guardSoftIndex ix
 

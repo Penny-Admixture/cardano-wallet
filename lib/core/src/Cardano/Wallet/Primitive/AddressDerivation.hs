@@ -29,6 +29,7 @@
 --  * "Cardano.Wallet.Primitive.AddressDerivation.Shelley"
 --  * "Cardano.Wallet.Primitive.AddressDerivation.Byron"
 
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module Cardano.Wallet.Primitive.AddressDerivation
     (
     -- * HD Derivation
@@ -89,7 +90,7 @@ import Prelude
 import Cardano.Address.Derivation
     ( XPrv, XPub, xpubPublicKey )
 import Cardano.Address.Script
-    ( KeyHash (..) )
+    ( KeyHash (..), KeyRole (..) )
 import Cardano.Mnemonic
     ( SomeMnemonic )
 import Cardano.Wallet.Primitive.Types
@@ -509,7 +510,7 @@ hashVerificationKey
     => k 'ScriptK XPub
     -> KeyHash
 hashVerificationKey =
-    KeyHash . blake2b224 . xpubPublicKey . getRawKey
+    KeyHash Payment . blake2b224 . xpubPublicKey . getRawKey
 
 {-------------------------------------------------------------------------------
                                  Passphrases

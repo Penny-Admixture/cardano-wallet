@@ -110,14 +110,16 @@ module Cardano.Wallet.Api.Server
 
 import Prelude
 
-import Cardano.Wallet.DB.Sqlite.Types ()
-import Cardano.Address.Script (KeyHash, Script(RequireSignatureOf))
 import Cardano.Address.Derivation
     ( XPrv, XPub, xpubPublicKey, xpubToBytes )
 import Cardano.Address.Script
-    ( Cosigner (..) )
+    ( Cosigner (..), KeyHash, Script (RequireSignatureOf) )
 import Cardano.Api
-    ( AnyCardanoEra (..), CardanoEra (..), SerialiseAsCBOR (..), AssetName(AssetName))
+    ( AnyCardanoEra (..)
+    , AssetName (AssetName)
+    , CardanoEra (..)
+    , SerialiseAsCBOR (..)
+    )
 import Cardano.BM.Tracing
     ( HasPrivacyAnnotation (..), HasSeverityAnnotation (..) )
 import Cardano.Mnemonic
@@ -262,14 +264,14 @@ import Cardano.Wallet.Compat
     ( (^?) )
 import Cardano.Wallet.DB
     ( DBFactory (..) )
+import Cardano.Wallet.DB.Sqlite.Types
+    ()
 import Cardano.Wallet.Network
     ( NetworkLayer, timeInterpreter )
 import Cardano.Wallet.Primitive.AddressDerivation
     ( DelegationAddress (..)
     , Depth (..)
     , DerivationIndex (..)
-    , hashVerificationKey
-    , deriveVerificationKey
     , DerivationType (..)
     , HardDerivation (..)
     , Index (..)
@@ -278,11 +280,13 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , Passphrase (..)
     , PaymentAddress (..)
     , RewardAccount (..)
-    , Role(MultisigScript)
+    , Role (MultisigScript)
     , SoftDerivation (..)
     , WalletKey (..)
     , deriveRewardAccount
+    , deriveVerificationKey
     , digest
+    , hashVerificationKey
     , preparePassphrase
     , publicKey
     )
@@ -292,7 +296,6 @@ import Cardano.Wallet.Primitive.AddressDerivation.Icarus
     ( IcarusKey )
 import Cardano.Wallet.Primitive.AddressDerivation.Shelley
     ( ShelleyKey )
-import Cardano.Wallet.Primitive.AddressDiscovery.Script (keyHashFromAccXPubIx)
 import Cardano.Wallet.Primitive.AddressDiscovery
     ( CompareDiscovery
     , GenChange (ArgGenChange)
@@ -302,6 +305,8 @@ import Cardano.Wallet.Primitive.AddressDiscovery
     )
 import Cardano.Wallet.Primitive.AddressDiscovery.Random
     ( RndState, mkRndState )
+import Cardano.Wallet.Primitive.AddressDiscovery.Script
+    ( keyHashFromAccXPubIx )
 import Cardano.Wallet.Primitive.AddressDiscovery.Script
     ( CredentialType (..) )
 import Cardano.Wallet.Primitive.AddressDiscovery.Sequential
@@ -326,12 +331,14 @@ import Cardano.Wallet.Primitive.AddressDiscovery.SharedState
     )
 import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
     ( SelectionError (..)
-    , SelectionResult(outputsCovered)
     , SelectionInsufficientError (..)
+    , SelectionResult (outputsCovered)
     , UnableToConstructChangeError (..)
     , balanceMissing
     , selectionDelta
     )
+import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin
+    ( SelectionCriteria (..) )
 import Cardano.Wallet.Primitive.Model
     ( Wallet, availableBalance, currentTip, getState, totalBalance )
 import Cardano.Wallet.Primitive.Slotting
@@ -378,7 +385,13 @@ import Cardano.Wallet.Primitive.Types.TokenMap
     ( AssetId (..) )
 import qualified Cardano.Wallet.Primitive.Types.TokenMap as TokenMap
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( TokenName (..), TokenPolicyId (..), nullTokenName, tokenPolicyIdFromScript )
+    ( TokenName (..)
+    , TokenPolicyId (..)
+    , nullTokenName
+    , tokenPolicyIdFromScript
+    )
+import Cardano.Wallet.Primitive.Types.TokenQuantity
+    ( TokenQuantity (TokenQuantity) )
 import Cardano.Wallet.Primitive.Types.Tx
     ( TransactionInfo (TransactionInfo)
     , Tx (..)
@@ -396,7 +409,6 @@ import Cardano.Wallet.Registry
     , defaultWorkerAfter
     , workerResource
     )
-import Cardano.Wallet.Primitive.Types.TokenQuantity (TokenQuantity(TokenQuantity))
 import Cardano.Wallet.TokenMetadata
     ( TokenMetadataClient, fillMetadata )
 import Cardano.Wallet.Transaction
@@ -427,7 +439,6 @@ import Control.Tracer
     ( Tracer, contramap )
 import Data.Aeson
     ( (.=) )
-import Data.String (fromString)
 import Data.ByteString
     ( ByteString )
 import Data.Coerce
@@ -460,6 +471,8 @@ import Data.Set
     ( Set )
 import Data.Streaming.Network
     ( HostPreference, bindPortTCP, bindRandomPortTCP )
+import Data.String
+    ( fromString )
 import Data.Text
     ( Text )
 import Data.Text.Class
@@ -488,7 +501,6 @@ import Network.Wai.Handler.Warp
     ( Port )
 import Network.Wai.Middleware.Logging
     ( ApiLog (..), newApiLoggerSettings, obfuscateKeys, withApiLogger )
-import Cardano.Wallet.Primitive.CoinSelection.MA.RoundRobin ( SelectionCriteria(..) )
 import Network.Wai.Middleware.ServerError
     ( handleRawError )
 import Numeric.Natural
@@ -3342,7 +3354,7 @@ forgeToken
     -> ApiT WalletId
     -> Api.ForgeTokenData n
     -> Handler (ApiTransaction n)
-forgeToken ctx genChange (ApiT wid) body = do
+forgeToken ctx addr genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
     let assetName = body ^. #assetName . #getApiT
     let assetQty = (\(Quantity nat) -> TokenQuantity nat) $ body ^. #mintAmount
@@ -3363,35 +3375,31 @@ forgeToken ctx genChange (ApiT wid) body = do
         --
         -- e.g. m/1852(purpose)​/​1815(coin_type)/0(account)​/3/0 -> monetary policy 1
         --      m/1852(purpose)​/​1815(coin_type)/0(account)​/3/1 -> monetary policy 2
-  
-        -- Get the public key of the monetary policy
-        addrXPub <- liftHandler $ W.derivePublicKey @_ @s @k @n wrk wid MultisigScript derivationIndex
-        addrXPrv <- liftHandler $ W.derivePrivateKey @_ @s @k @n wrk wid pwd (MultisigScript, derivationIndex)
 
-        -- Use that public key to generate a monetary policy
+        -- Derive a signing key for the monetary policy
+        policyKey <- liftHandler $ W.derivePrivateKey @_ @s @k @n wrk wid pwd (MultisigScript, derivationIndex)
+
         let
-          keyHash :: KeyHash
-          keyHash = hashVerificationKey @k (liftRawKey . getRawKey $ addrXPub)
-  
+          scriptXPub = publicKey $ fst policyKey
+
+          vkeyHash :: KeyHash
+          vkeyHash = hashVerificationKey @k $ liftRawKey $ getRawKey scriptXPub
+
           script :: Script KeyHash
-          script = RequireSignatureOf keyHash
-  
+          script = RequireSignatureOf vkeyHash
+
           policyId :: TokenPolicyId
           policyId = tokenPolicyIdFromScript script
-  
+
           assetId :: AssetId
           assetId = AssetId policyId assetName
 
-          payAddrXPub :: Address
-          payAddrXPub = paymentAddress @n @k addrXPub
-  
-        liftIO $ putStrLn $ T.unpack $ toText keyHash
+        liftIO $ putStrLn $ T.unpack $ toText vkeyHash
 
         -- Transfer the minted assets to the payment address
         -- associated with the monetary policy
         let assets = TokenMap.singleton assetId assetQty
-        let txout = TxOut payAddrXPub (TokenBundle.TokenBundle (Coin 0) assets)
-        let outs = pure txout
+        let txout = [TxOut addr (TokenBundle.TokenBundle (Coin 0) assets)]
         -- let outs = fmap (\(TxOut addr (TokenBundle.TokenBundle coin tokens)) -> TxOut addr (TokenBundle.TokenBundle coin mempty)) (pure txout)
 
         let txCtx = defaultTransactionCtx
@@ -3404,7 +3412,7 @@ forgeToken ctx genChange (ApiT wid) body = do
         w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
         -- liftIO $ putStrLn $ "Starting SEL..."
         sel <- liftHandler
-            $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)
+            $ W.selectAssets @_ @s @k wrk w txCtx txout (const Prelude.id)
         -- liftIO $ putStrLn $ "Finished SEL"
         -- liftIO $ putStrLn $ show sel
 
