@@ -71,6 +71,7 @@ import Cardano.Wallet.Api.Types
     , ApiPostRandomAddressData
     , ApiPutAddressesDataT
     , ApiSelectCoinsDataT
+    , ApiSignedTransactionT
     , ApiT (..)
     , ApiTransactionT
     , ApiTxId (..)
@@ -80,8 +81,9 @@ import Cardano.Wallet.Api.Types
     , ByronWalletPutPassphraseData (..)
     , Iso8601Time (..)
     , PostExternalTransactionData (..)
-    , PostTransactionDataT
-    , PostTransactionFeeDataT
+    , PostSignTransactionDataT
+    , PostTransactionFeeOldDataT
+    , PostTransactionOldDataT
     , WalletPutData (..)
     , WalletPutPassphraseData (..)
     )
@@ -150,13 +152,17 @@ data TransactionClient = TransactionClient
         -> Maybe Iso8601Time
         -> Maybe (ApiT SortOrder)
         -> ClientM [ApiTransactionT Aeson.Value]
+    , postSignTransaction
+        :: ApiT WalletId
+        -> PostSignTransactionDataT Aeson.Value
+        -> ClientM (ApiSignedTransactionT Aeson.Value)
     , postTransaction
         :: ApiT WalletId
-        -> PostTransactionDataT Aeson.Value
+        -> PostTransactionOldDataT Aeson.Value
         -> ClientM (ApiTransactionT Aeson.Value)
     , postTransactionFee
         :: ApiT WalletId
-        -> PostTransactionFeeDataT Aeson.Value
+        -> PostTransactionFeeOldDataT Aeson.Value
         -> ClientM ApiFee
     , postExternalTransaction
         :: PostExternalTransactionData
@@ -273,7 +279,8 @@ transactionClient
     :: TransactionClient
 transactionClient =
     let
-        _postTransaction
+        _postSignTransaction
+            :<|> _postTransaction
             :<|> _listTransactions
             :<|> _postTransactionFee
             :<|> _deleteTransaction
@@ -285,6 +292,7 @@ transactionClient =
     in
         TransactionClient
             { listTransactions = (`_listTransactions` Nothing)
+            , postSignTransaction = _postSignTransaction
             , postTransaction = _postTransaction
             , postTransactionFee = _postTransactionFee
             , postExternalTransaction = _postExternalTransaction
@@ -297,7 +305,8 @@ byronTransactionClient
     :: TransactionClient
 byronTransactionClient =
     let
-        _postTransaction
+        _postSignTransaction
+            :<|> _postTransaction
             :<|> _listTransactions
             :<|> _postTransactionFee
             :<|> _deleteTransaction
@@ -309,6 +318,7 @@ byronTransactionClient =
 
     in TransactionClient
         { listTransactions = _listTransactions
+        , postSignTransaction = _postSignTransaction
         , postTransaction = _postTransaction
         , postTransactionFee = _postTransactionFee
         , postExternalTransaction = _postExternalTransaction
@@ -407,6 +417,6 @@ type instance ApiAddressIdT Aeson.Value = Text
 type instance ApiCoinSelectionT Aeson.Value = Aeson.Value
 type instance ApiSelectCoinsDataT Aeson.Value = Aeson.Value
 type instance ApiTransactionT Aeson.Value = Aeson.Value
-type instance PostTransactionDataT Aeson.Value = Aeson.Value
-type instance PostTransactionFeeDataT Aeson.Value = Aeson.Value
+type instance PostTransactionOldDataT Aeson.Value = Aeson.Value
+type instance PostTransactionFeeOldDataT Aeson.Value = Aeson.Value
 type instance ApiPutAddressesDataT Aeson.Value = Aeson.Value
