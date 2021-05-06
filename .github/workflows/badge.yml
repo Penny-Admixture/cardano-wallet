@@ -1,0 +1,41 @@
+name: Hydra Badge
+
+on:
+  status:
+  push:
+    branches:
+      - rvl/adp-753/ci-notify
+
+jobs:
+  badge:
+    if: ${{ (github.ref == 'refs/heads/master' && (github.event.state == 'success' || github.event.state == 'failure') && github.event.context == 'ci/hydra-build:required') || github.ref == 'refs/heads/rvl/adp-753/ci-notify' }}
+    runs-on: ubuntu-20.04
+    steps:
+      - name: '❄ Wait for Hydra build'
+        uses: rvl/hydra-build-products-action@master
+        id: hydra
+        with:
+          hydra: https://hydra.iohk.io
+          statusName: ci/hydra-eval
+          jobs: required
+          requiredJob: required
+          project: Cardano
+          jobset: cardano-wallet
+          badge: yes
+
+      - name: '📛 Update Badge'
+        run: |
+          echo '${{ steps.hydra.outputs.badge }}'
+          mkdir -p _build/img
+          curl '${{ steps.hydra.outputs.badge }}' > _build/img/hydra-badge.svg
+
+      - name: '📘 Publish'
+        uses: peaceiris/actions-gh-pages@v3
+        if: ${{ github.ref == 'refs/heads/master' }}
+        with:
+          github_token: ${{ secrets.WILLIAM_KING_TOKEN }}
+          enable_jekyll: false
+          publish_dir: _build
+          keep_files: true
+          user_name: 'William King Noel Bot'
+          user_email: 'adrestia@iohk.io'
