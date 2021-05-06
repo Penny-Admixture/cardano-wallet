@@ -64,8 +64,9 @@ module Cardano.Wallet.Api.Server
     , postRandomAddress
     , postRandomWallet
     , postRandomWalletFromXPrv
-    , postTransaction
-    , postTransactionFee
+    , postSignTransaction
+    , postTransactionOld
+    , postTransactionFeeOld
     , postTrezorWallet
     , postWallet
     , postShelleyWallet
@@ -211,6 +212,7 @@ import Cardano.Wallet.Api.Types
     , ApiSharedWalletPostData (..)
     , ApiSharedWalletPostDataFromAccountPubX (..)
     , ApiSharedWalletPostDataFromMnemonics (..)
+    , ApiSignedTransaction (..)
     , ApiSlotId (..)
     , ApiSlotReference (..)
     , ApiT (..)
@@ -241,8 +243,9 @@ import Cardano.Wallet.Api.Types
     , KnownDiscovery (..)
     , MinWithdrawal (..)
     , PostExternalTransactionData (..)
-    , PostTransactionData (..)
-    , PostTransactionFeeData (..)
+    , PostSignTransactionData (..)
+    , PostTransactionFeeOldData (..)
+    , PostTransactionOldData (..)
     , WalletOrAccountPostData (..)
     , WalletPostData (..)
     , WalletPutData (..)
@@ -1686,7 +1689,33 @@ listAddresses ctx normalize (ApiT wid) stateFilter = do
                                     Transactions
 -------------------------------------------------------------------------------}
 
-postTransaction
+postSignTransaction
+    :: forall ctx s k n.
+        ( ctx ~ ApiLayer s k
+        , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
+        , GenChange s
+        , HardDerivation k
+        , HasNetworkLayer IO ctx
+        , IsOwned s k
+        , Typeable n
+        , Typeable s
+        , WalletKey k
+        )
+    => ctx
+    -> ApiT WalletId
+    -> PostSignTransactionData n
+    -> Handler (ApiSignedTransaction n)
+postSignTransaction ctx (ApiT wid) body = do
+    let pwd = coerce $ body ^. #passphrase . #getApiT
+    let txBody = body ^. #txBody
+
+    (_, mkRwdAcct) <- mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
+
+    W.SealedTx sealedTx <- withWorkerCtx ctx wid liftE liftE $ \wrk ->
+        liftHandler $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txBody
+    pure $ ApiSignedTransaction sealedTx
+
+postTransactionOld
     :: forall ctx s k n.
         ( ctx ~ ApiLayer s k
         , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
@@ -1701,9 +1730,9 @@ postTransaction
     => ctx
     -> ArgGenChange s
     -> ApiT WalletId
-    -> PostTransactionData n
+    -> PostTransactionOldData n
     -> Handler (ApiTransaction n)
-postTransaction ctx genChange (ApiT wid) body = do
+postTransactionOld ctx genChange (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
     let outs = addressAmountToTxOut <$> body ^. #payments
     let md = body ^? #metadata . traverse . #getApiT
@@ -1724,7 +1753,7 @@ postTransaction ctx genChange (ApiT wid) body = do
         sel <- liftHandler
             $ W.selectAssets @_ @s @k wrk w txCtx outs (const Prelude.id)
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+            $ W.buildAndSignTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
         pure (sel, tx, txMeta, txTime)
@@ -1806,7 +1835,7 @@ mkApiTransactionFromInfo ti (TransactionInfo txid fee ins outs ws meta depth txt
   where
       drop2nd (a,_,c) = (a,c)
 
-postTransactionFee
+postTransactionFeeOld
     :: forall ctx s k n.
         ( ctx ~ ApiLayer s k
         , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
@@ -1817,9 +1846,9 @@ postTransactionFee
         )
     => ctx
     -> ApiT WalletId
-    -> PostTransactionFeeData n
+    -> PostTransactionFeeOldData n
     -> Handler ApiFee
-postTransactionFee ctx (ApiT wid) body = do
+postTransactionFeeOld ctx (ApiT wid) body = do
     (wdrl, _) <- mkRewardAccountBuilder @_ @s @_ @n ctx wid (body ^. #withdrawal)
     let txCtx = defaultTransactionCtx
             { txWithdrawal = wdrl
@@ -1882,7 +1911,7 @@ joinStakePool ctx knownPools getPoolStatus apiPoolId (ApiT wid) body = do
             $ W.selectAssetsNoOutputs @_ @s @k wrk wid wal txCtx
             $ const Prelude.id
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+            $ W.buildAndSignTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 
@@ -1965,7 +1994,7 @@ quitStakePool ctx (ApiT wid) body = do
             $ W.selectAssetsNoOutputs @_ @s @k wrk wid wal txCtx
             $ const Prelude.id
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
+            $ W.buildAndSignTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel
         liftHandler
             $ W.submitTx @_ @s @k wrk wid (tx, txMeta, sealedTx)
 

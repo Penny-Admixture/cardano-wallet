@@ -112,6 +112,7 @@ module Cardano.Wallet
     , assignChangeAddresses
     , selectionToUnsignedTx
     , signTransaction
+    , buildAndSignTransaction
     , ErrSelectAssets(..)
     , ErrSignPayment (..)
     , ErrNotASequentialWallet (..)
@@ -1427,11 +1428,50 @@ selectAssets ctx (utxo, cp, pending) tx outs transform = do
         hasWithdrawal :: Tx -> Bool
         hasWithdrawal = not . null . withdrawals
 
+signTransaction
+    :: forall ctx s k.
+        ( HasTransactionLayer k ctx
+        , HasDBLayer IO s k ctx
+        , HasNetworkLayer IO ctx
+        , IsOwned s k
+        , GenChange s
+        )
+    => ctx
+    -> WalletId
+    -> ((k 'RootK XPrv, Passphrase "encryption") -> (XPrv, Passphrase "encryption"))
+       -- ^ Reward account derived from the root key (or somewhere else).
+    -> Passphrase "raw"
+    -> ByteString
+    -> ExceptT ErrSignPayment IO SealedTx
+signTransaction ctx wid mkRwdAcct pwd txBody = db & \DBLayer{..} -> do
+    era <- liftIO $ currentNodeEra nl
+    -- (tx, binary) <- withExceptT ErrSubmitExternalTxDecode $ except $
+    --     decodeSignedTx tl era txBody
+    withRootKey @_ @s ctx wid pwd ErrSignPaymentWithRootKey $ \xprv scheme -> do
+        let pwdP = preparePassphrase scheme pwd
+        mapExceptT atomically $ do
+            cp <- withExceptT ErrSignPaymentNoSuchWallet $ withNoSuchWallet wid $
+                readCheckpoint wid
+            pp <- liftIO $ currentProtocolParameters nl
+
+            let keyFrom = isOwned (getState cp) (xprv, pwdP)
+            let rewardAcnt = mkRwdAcct (xprv, pwdP)
+
+            -- TODO: ADP-919 implement this
+            -- withExceptT ErrSignPaymentMkTx $ ExceptT $ pure $
+            --     witnessTransaction tl rewardAcnt keyFrom txBody
+            pure $ SealedTx txBody
+
+  where
+    db = ctx ^. dbLayer @IO @s @k
+    tl = ctx ^. transactionLayer @k
+    nl = ctx ^. networkLayer
+
 -- | Produce witnesses and construct a transaction from a given
 -- selection. Requires the encryption passphrase in order to decrypt
 -- the root private key. Note that this doesn't broadcast the
 -- transaction to the network. In order to do so, use 'submitTx'.
-signTransaction
+buildAndSignTransaction
     :: forall ctx s k.
         ( HasTransactionLayer k ctx
         , HasDBLayer IO s k ctx
@@ -1448,7 +1488,7 @@ signTransaction
     -> TransactionCtx
     -> SelectionResult TokenBundle
     -> ExceptT ErrSignPayment IO (Tx, TxMeta, UTCTime, SealedTx)
-signTransaction ctx wid argChange mkRwdAcct pwd txCtx sel = db & \DBLayer{..} -> do
+buildAndSignTransaction ctx wid argChange mkRwdAcct pwd txCtx sel = db & \DBLayer{..} -> do
     era <- liftIO $ currentNodeEra nl
     withRootKey @_ @s ctx wid pwd ErrSignPaymentWithRootKey $ \xprv scheme -> do
         let pwdP = preparePassphrase scheme pwd

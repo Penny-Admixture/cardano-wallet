@@ -93,8 +93,9 @@ import Cardano.Wallet.Api.Server
     , postRandomWallet
     , postRandomWalletFromXPrv
     , postSharedWallet
-    , postTransaction
-    , postTransactionFee
+    , postSignTransaction
+    , postTransactionFeeOld
+    , postTransactionOld
     , postTrezorWallet
     , postWallet
     , putByronWalletPassphrase
@@ -214,7 +215,7 @@ server byron icarus shelley multisig spl ntp =
     :<|> assets
     :<|> addresses
     :<|> coinSelections
-    :<|> walletTransactions
+    :<|> shelleyTransactions
     :<|> shelleyMigrations
     :<|> stakePools
     :<|> byronWallets
@@ -278,11 +279,12 @@ server byron icarus shelley multisig spl ntp =
                     selectCoinsForQuit shelley wid
         )
 
-    walletTransactions :: Server (Transactions n)
-    walletTransactions =
-        postTransaction shelley (delegationAddress @n)
+    shelleyTransactions :: Server (Transactions n)
+    shelleyTransactions =
+        postSignTransaction shelley
+        :<|> postTransactionOld shelley (delegationAddress @n)
         :<|> listTransactions shelley
-        :<|> postTransactionFee shelley
+        :<|> postTransactionFeeOld shelley
         :<|> deleteTransaction shelley
         :<|> getTransaction shelley
 
@@ -409,15 +411,20 @@ server byron icarus shelley multisig spl ntp =
     byronTransactions :: Server (ByronTransactions n)
     byronTransactions =
              (\wid tx -> withLegacyLayer wid
+                 (byron, postSignTransaction byron wid tx)
+                 (icarus, postSignTransaction icarus wid tx)
+             )
+         :<|>
+             (\wid tx -> withLegacyLayer wid
                  (byron , do
                     let pwd = coerce (getApiT $ tx ^. #passphrase)
                     genChange <- rndStateChange byron wid pwd
-                    postTransaction byron genChange wid tx
+                    postTransactionOld byron genChange wid tx
 
                  )
                  (icarus, do
                     let genChange k _ = paymentAddress @n k
-                    postTransaction icarus genChange wid tx
+                    postTransactionOld icarus genChange wid tx
                  )
              )
         :<|>
@@ -427,8 +434,8 @@ server byron icarus shelley multisig spl ntp =
              )
         :<|>
             (\wid tx -> withLegacyLayer wid
-                (byron , postTransactionFee byron wid tx)
-                (icarus, postTransactionFee icarus wid tx)
+                (byron , postTransactionFeeOld byron wid tx)
+                (icarus, postTransactionFeeOld icarus wid tx)
             )
         :<|> (\wid txid -> withLegacyLayer wid
                 (byron , deleteTransaction byron wid txid)
