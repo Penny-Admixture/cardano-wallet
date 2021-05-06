@@ -521,8 +521,8 @@ getTransactionFee
     => w
     -> (Method, Text)
 getTransactionFee w = discriminate @style
-    (endpoint @(Api.PostTransactionFee Net) (wid &))
-    (endpoint @(Api.PostByronTransactionFee Net) (wid &))
+    (endpoint @(Api.PostTransactionFeeOld Net) (wid &))
+    (endpoint @(Api.PostByronTransactionFeeOld Net) (wid &))
   where
     wid = w ^. typed @(ApiT WalletId)
 
