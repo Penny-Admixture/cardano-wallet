@@ -214,7 +214,7 @@ server byron icarus shelley multisig spl ntp =
     :<|> assets
     :<|> addresses
     :<|> coinSelections
-    :<|> transactions
+    :<|> walletTransactions
     :<|> shelleyMigrations
     :<|> stakePools
     :<|> byronWallets
@@ -278,8 +278,8 @@ server byron icarus shelley multisig spl ntp =
                     selectCoinsForQuit shelley wid
         )
 
-    transactions :: Server (Transactions n)
-    transactions =
+    walletTransactions :: Server (Transactions n)
+    walletTransactions =
         postTransaction shelley (delegationAddress @n)
         :<|> listTransactions shelley
         :<|> postTransactionFee shelley

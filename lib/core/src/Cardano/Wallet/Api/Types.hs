@@ -84,8 +84,10 @@ module Cardano.Wallet.Api.Types
     , WalletPutData (..)
     , SettingsPutData (..)
     , WalletPutPassphraseData (..)
-    , PostTransactionData (..)
-    , PostTransactionFeeData (..)
+    , PostSignTransactionData (..)
+    , ApiSignedTransaction (..)
+    , PostTransactionOldData (..)
+    , PostTransactionFeeOldData (..)
     , PostExternalTransactionData (..)
     , ApiTransaction (..)
     , ApiWithdrawalPostData (..)
@@ -171,8 +173,10 @@ module Cardano.Wallet.Api.Types
     , ApiCoinSelectionT
     , ApiSelectCoinsDataT
     , ApiTransactionT
-    , PostTransactionDataT
-    , PostTransactionFeeDataT
+    , ApiSignedTransactionT
+    , PostSignTransactionDataT
+    , PostTransactionOldDataT
+    , PostTransactionFeeOldDataT
     , ApiWalletMigrationPlanPostDataT
     , ApiWalletMigrationPostDataT
 
@@ -778,7 +782,13 @@ data ByronWalletPutPassphraseData = ByronWalletPutPassphraseData
     , newPassphrase :: !(ApiT (Passphrase "raw"))
     } deriving (Eq, Generic, Show)
 
-data PostTransactionData (n :: NetworkDiscriminant) = PostTransactionData
+-- TODO: NetworkDiscriminant may be unnecessary
+data PostSignTransactionData (n :: NetworkDiscriminant) = PostSignTransactionData
+    { txBody :: !ByteString -- TODO: ADP-902 or tx
+    , passphrase :: !(ApiT (Passphrase "lenient"))
+    } deriving (Eq, Generic, Show)
+
+data PostTransactionOldData (n :: NetworkDiscriminant) = PostTransactionData
     { payments :: !(NonEmpty (AddressAmount (ApiT Address, Proxy n)))
     , passphrase :: !(ApiT (Passphrase "lenient"))
     , withdrawal :: !(Maybe ApiWithdrawalPostData)
@@ -786,7 +796,7 @@ data PostTransactionData (n :: NetworkDiscriminant) = PostTransactionData
     , timeToLive :: !(Maybe (Quantity "second" NominalDiffTime))
     } deriving (Eq, Generic, Show)
 
-data PostTransactionFeeData (n :: NetworkDiscriminant) = PostTransactionFeeData
+data PostTransactionFeeOldData (n :: NetworkDiscriminant) = PostTransactionFeeOldData
     { payments :: (NonEmpty (AddressAmount (ApiT Address, Proxy n)))
     , withdrawal :: !(Maybe ApiWithdrawalPostData)
     , metadata :: !(Maybe (ApiT TxMetadata))
@@ -879,6 +889,11 @@ data ApiTransaction (n :: NetworkDiscriminant) = ApiTransaction
     , mint :: !(ApiT W.TokenMap)
     , status :: !(ApiT TxStatus)
     , metadata :: !ApiTxMetadata
+    } deriving (Eq, Generic, Show)
+      deriving anyclass NFData
+
+newtype ApiSignedTransaction (n :: NetworkDiscriminant) = ApiSignedTransaction
+    { signedTx :: ByteString
     } deriving (Eq, Generic, Show)
       deriving anyclass NFData
 
@@ -2072,9 +2087,9 @@ instance ToJSON (ApiT BoundType) where
 instance FromJSON (ApiT BoundType) where
     parseJSON = fmap ApiT . genericParseJSON defaultSumTypeOptions
 
-instance DecodeAddress t => FromJSON (PostTransactionData t) where
+instance DecodeAddress t => FromJSON (PostTransactionOldData t) where
     parseJSON = genericParseJSON defaultRecordTypeOptions
-instance EncodeAddress t => ToJSON (PostTransactionData t) where
+instance EncodeAddress t => ToJSON (PostTransactionOldData t) where
     toJSON = genericToJSON defaultRecordTypeOptions
 
 instance FromJSON ApiWithdrawalPostData where
@@ -2089,9 +2104,9 @@ instance ToJSON ApiWithdrawalPostData where
         SelfWithdrawal -> toJSON ("self" :: String)
         ExternalWithdrawal mw -> toJSON mw
 
-instance DecodeAddress t => FromJSON (PostTransactionFeeData t) where
+instance DecodeAddress t => FromJSON (PostTransactionFeeOldData t) where
     parseJSON = genericParseJSON defaultRecordTypeOptions
-instance EncodeAddress t => ToJSON (PostTransactionFeeData t) where
+instance EncodeAddress t => ToJSON (PostTransactionFeeOldData t) where
     toJSON = genericToJSON defaultRecordTypeOptions
 
 -- Note: These custom JSON instances are for compatibility with the existing API
@@ -2679,8 +2694,10 @@ type family ApiAddressIdT (n :: k) :: Type
 type family ApiCoinSelectionT (n :: k) :: Type
 type family ApiSelectCoinsDataT (n :: k) :: Type
 type family ApiTransactionT (n :: k) :: Type
-type family PostTransactionDataT (n :: k) :: Type
-type family PostTransactionFeeDataT (n :: k) :: Type
+type family ApiSignedTransactionT (n :: k) :: Type
+type family PostSignTransactionDataT (n :: k) :: Type
+type family PostTransactionOldDataT (n :: k) :: Type
+type family PostTransactionFeeOldDataT (n :: k) :: Type
 type family ApiWalletMigrationPlanPostDataT (n :: k) :: Type
 type family ApiWalletMigrationPostDataT (n :: k1) (s :: k2) :: Type
 type family ApiPutAddressesDataT (n :: k) :: Type
@@ -2703,11 +2720,17 @@ type instance ApiSelectCoinsDataT (n :: NetworkDiscriminant) =
 type instance ApiTransactionT (n :: NetworkDiscriminant) =
     ApiTransaction n
 
-type instance PostTransactionDataT (n :: NetworkDiscriminant) =
-    PostTransactionData n
+type instance ApiSignedTransactionT (n :: NetworkDiscriminant) =
+    ApiSignedTransaction n
 
-type instance PostTransactionFeeDataT (n :: NetworkDiscriminant) =
-    PostTransactionFeeData n
+type instance PostSignTransactionDataT (n :: NetworkDiscriminant) =
+    PostSignTransactionData n
+
+type instance PostTransactionOldDataT (n :: NetworkDiscriminant) =
+    PostTransactionOldData n
+
+type instance PostTransactionFeeOldDataT (n :: NetworkDiscriminant) =
+    PostTransactionFeeOldData n
 
 type instance ApiWalletMigrationPlanPostDataT (n :: NetworkDiscriminant) =
     ApiWalletMigrationPlanPostData n

@@ -479,8 +479,8 @@ createTransaction
     => w
     -> (Method, Text)
 createTransaction w = discriminate @style
-    (endpoint @(Api.CreateTransaction Net) (wid &))
-    (endpoint @(Api.CreateByronTransaction Net) (wid &))
+    (endpoint @(Api.CreateTransactionOld Net) (wid &))
+    (endpoint @(Api.CreateByronTransactionOld Net) (wid &))
   where
     wid = w ^. typed @(ApiT WalletId)
 
