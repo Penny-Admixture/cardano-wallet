@@ -70,14 +70,32 @@ import Quiet
 import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TB
 
 --------------------------------------------------------------------------------
--- Delegation State
+-- Stake Key State
 --------------------------------------------------------------------------------
 
 data DelegationState k = DelegationState
     { -- | The account public key from which the stake keys should be derived.
       rewardAccountKey :: k 'AccountK XPub
+
+      -- | The next unregistered stake key.
+      --
+      -- The active stake keys can be described as the half-open interval
+      --    @@ [0, nextKeyIx ) @@
+      -- having a length of @nextKeyIx@.
+      --
+      -- E.g. a state with nextKeyIx=0 has no keys, and nextKeyIx=2 has the keys
+      -- [0,1].
     , nextKeyIx :: !(Index 'Soft 'AddressK)
+
+      -- | By threading a long a "pointer UTxO", we leverage the ledger rules to
+      -- ensure transactions cannot be re-ordered in a way that breaks the
+      -- rules/assumtions for how stake-keys are managed.
     , pointer :: !(Maybe PointerUTxO)
+
+      -- | For compatibility with single-stake-key wallets, we track whether
+      -- stake key 0 is registered or not separately.
+      --
+      -- See the implementaiton of @applyTx@ for how it is used.
     , isKey0Reg :: Bool
     } deriving (Generic)
 
@@ -197,28 +215,25 @@ setPortfolioOf s mkAddress isReg n =
         minUTxOVal = Coin 1 -- FIXME
         -- TODO: Need to rely on wallet to return as change, if the minUTxOVal
         -- changes. Not sure if this is the case.
-        pointerOut =
-            [ TxOut (mkAddress $ keyAtIx s $ nextKeyIx s') (TB.fromCoin minUTxOVal)
-            ]
-
-        pointerIn = maybeToList (mkTxIn <$> pointer s)
+        txWithCerts [] = Nothing
+        txWithCerts cs = Just $ Tx
+            { certs = cs
+            , inputs = maybeToList (mkTxIn <$> pointer s)
+            , outputs =
+                [ TxOut
+                    (mkAddress $ keyAtIx s $ nextKeyIx s')
+                    (TB.fromCoin minUTxOVal)
+                ]
+            }
     in
-        case compare (toEnum n) (nextKeyIx s) of
-            GT -> Just $ Tx
-                { certs = deleg [nextKeyIx s .. toEnum (n - 1)]
-                , inputs = pointerIn
-                , outputs = pointerOut
-                }
-            EQ -> case reRegKey0IfNeeded ++ deRegKey0IfNeeded of
-                [] -> Nothing
-                xs -> Just $ Tx xs pointerIn pointerOut -- TODO: is this sane?
-            LT -> Just $ Tx
-                { certs = dereg $ reverse [toEnum n .. (pred $ nextKeyIx s)]
-                , inputs = pointerIn
-                , outputs = pointerOut
-                }
+        txWithCerts $ reRegKey0IfNeeded
+            ++ deRegKey0IfNeeded
+            ++ case compare (toEnum n) (nextKeyIx s) of
+                GT -> deleg [nextKeyIx s .. toEnum (n - 1)]
+                EQ -> []
+                LT -> dereg $ reverse [toEnum n .. (pred $ nextKeyIx s)]
   where
-    deleg = (reRegKey0IfNeeded ++) . (>>= \ix ->
+    deleg = (>>= \ix ->
         if isReg (acct ix)
         then [Delegate (acct ix)]
         else [RegisterKey (acct ix),  Delegate (acct ix)]
@@ -236,7 +251,7 @@ setPortfolioOf s mkAddress isReg n =
         , fromEnum (nextKeyIx s) == 0
         ]
 
-    dereg ixs = reRegKey0IfNeeded ++ deRegKey0IfNeeded ++
+    dereg ixs =
         [ DeRegisterKey (acct ix)
         | ix <- ixs
         , isReg . acct $ ix
@@ -258,19 +273,20 @@ applyTx
 applyTx (Tx cs _ins outs) h s0 =
     let
         s = foldl (flip applyCert) s0 cs
-        isOurOut i (TxOut addr _b) = case (paymentKeyFingerprint @k $ keyAtIx s i, paymentKeyFingerprint addr) of
+        isOurOut i (TxOut addr _b) =
+            case (paymentKeyFingerprint @k $ keyAtIx s i, paymentKeyFingerprint addr) of
             (Right fp, Right fp')
                 | fp == fp' -> True
                 | otherwise -> False
             _ -> False
         -- To workaround rollback + old wallets, we also look for the pointer at
-        -- 0 and 1
-        pointerOuts = filter (\(_,x) -> isOurOut (nextKeyIx s) x || isOurOut minBound x || isOurOut (succ minBound) x) $ zip [0..] outs
-        pointerIx = nextKeyIx s -- FIXME!
+        -- 0 and 1, aside from nextKeyIx.
+        f o = any (`isOurOut` o) [ nextKeyIx s, minBound, succ minBound ]
+        pointerOuts = filter (f . snd) $ zip [0..] outs
     in case pointerOuts of
         [] -> s --error "panic: no pointer utxo on-chain" -- What should we do?
         [(ix,TxOut _addr tb)]
-            -> s { pointer = Just $ PointerUTxO (TxIn h ix) (TB.getCoin tb) pointerIx }
+            -> s { pointer = Just $ PointerUTxO (TxIn h ix) (TB.getCoin tb) (nextKeyIx s) }
         (_x:_) -> error "todo"
             -- There shouldn't be more than one pointer, but theoretically
             -- possible. If a user sends funds to an address corresponding to
@@ -286,7 +302,7 @@ applyTx (Tx cs _ins outs) h s0 =
         -> DelegationState k
     modifyIx f s = s { nextKeyIx = f (nextKeyIx s) }
 
-    applyCert c s = tweak $ flip modifyIx s $ case c of
+    applyCert c s = modifyKey0 $ flip modifyIx s $ case c of
         RegisterKey _ -> id
         Delegate k
             | k == nextKey s            -> succ
@@ -297,7 +313,7 @@ applyTx (Tx cs _ins outs) h s0 =
               -- TODO: Reason explicitly about the safety of this @pred@.
             | otherwise                 -> id
       where
-        tweak s' = case c of
+        modifyKey0 s' = case c of
             RegisterKey k
                 | k == acct 0 -> s' { isKey0Reg = True }
                 | otherwise   -> s'

@@ -26,7 +26,6 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , RewardAccount
     , SoftDerivation (..)
     , ToRewardAccount (..)
-    , hex
     )
 import Cardano.Wallet.Primitive.AddressDiscovery.Delegation
 import Cardano.Wallet.Primitive.Types.Address
@@ -51,8 +50,9 @@ import Test.Hspec
 import Test.QuickCheck
     ( Arbitrary (..)
     , NonNegative (..)
+    , Property
     , counterexample
-    , forAll
+    , forAllShow
     , frequency
     , genericShrink
     , property
@@ -120,34 +120,39 @@ spec = do
     it "(apply (cmds <> CmdSetPortfolioOf 0) s0) === s0"
         $ property $ \cmds -> do
             let env = applyCmds env0 (cmds ++ [CmdSetPortfolioOf 0])
-            -- NOTE: It wouldn't be wrong to allow presentableKeys to show keys
-            -- registered but not delegating. But we don't really expect such
-            -- cases to happen, so there's no need.
-            --
-            -- Because of this, we can just check for direct equality here:
             activeKeys (wallet env) === activeKeys (wallet env0)
 
     it "no rejected txs, normally" $ property $ \cmds -> do
         let env = applyCmds env0 cmds
         rejectedTxs env === []
 
-    it "can recover from dropped transactions" $ withMaxSuccess 500 $ property $ \cmds (NonNegative n) -> do
-        let env1' = applyCmds env0 (cmds <> [CmdSetPortfolioOf n])
-        forAll (sublistOf (reverse $ txs env1')) $ \subChain ->  do
-            let env1 = applyTxs env0 subChain
-            let env2 = applyCmds env1 [CmdSetPortfolioOf n]
+    -- Lots of weird things can happen when we concider concurrent user-actions
+    -- on multiple wallet versions and rollbacks.
+    --
+    -- Whatever happens, we should be able to recover using a single
+    -- @CmdSetPortfolioOf n@, and be concistent with the ledger.
+    it "can recover from dropped transactions" $ withMaxSuccess 2000 $ property $ \cmds (NonNegative n) ->
+        forAllSubchains (applyCmds env0 cmds) $ \env' -> do
+            let env = applyCmds env' [CmdSetPortfolioOf n]
 
             let isSubsetOf a b = counterexample (show a <> " ⊄ " <> show b)
                     $ a `Set.isSubsetOf` b
 
-            let allActiveKeysRegistered env =
-                    Set.map toRewardAccount (Set.fromList (activeKeys $ wallet env))
-                        `isSubsetOf` regs (ledger env)
+            let allActiveKeysRegistered e =
+                    Set.map toRewardAccount (Set.fromList (activeKeys $ wallet e))
+                        `isSubsetOf` regs (ledger e)
 
+            counterexample (pretty env) $
+                length (activeKeys $ wallet env) === n
+                    .&&. allActiveKeysRegistered env
 
-            counterexample (pretty env2) $
-                length (activeKeys $ wallet env2) === n
-                    .&&. allActiveKeysRegistered env2
+-- | Take an arbitrary subset of the txs of an @Env@ to generate a new @Env@.
+--
+-- NOTE: Can drop txs, but not reorder them.
+forAllSubchains :: Env -> (Env -> Property) -> Property
+forAllSubchains env prop =  do
+    forAllShow (sublistOf (reverse $ txs env)) (fmt . blockListF) $ \subchain ->  do
+        prop $ applyTxs env0 subchain
 
 accK :: StakeKey' 'AccountK XPub
 accK = StakeKey' 0
@@ -251,7 +256,7 @@ instance Buildable Tx where
     build (Tx cs ins outs) = "Tx " <> listF cs <> " " <> listF' (inF . fst) ins <> " -> " <> listF' outF outs
 
 inF :: TxIn -> Builder
-inF (TxIn h ix) = build h <> "." <> build ix
+inF (TxIn h ix) = build h <> "." <> build (fromEnum ix)
 
 outF :: TxOut -> Builder
 outF (TxOut (Address addr) _tb) = build $ B8.unpack addr
@@ -350,7 +355,7 @@ applyTxs :: Env -> [Tx] -> Env
 applyTxs = foldl (flip tryApplyTx)
 
 txid :: Tx -> Hash "Tx"
-txid = Hash . BS.take 5 . hex . blake2b224 . B8.pack . show
+txid = Hash . BS.take 4 . blake2b224 . B8.pack . show
 
 
 --
@@ -398,7 +403,7 @@ ledgerApplyTx tx h l' =
         in
             if canSpend
             then Right $ Ledger r $ Map.union newOuts $ utxo `Map.withoutKeys` ins
-            else Left $ "invalid utxo spending in tx: " <> show tx
+            else Left $ "invalid utxo spending in tx: " <> pretty tx
 
     ledgerApplyCert :: Cert -> Ledger -> Either String Ledger
     ledgerApplyCert (Delegate k) l
