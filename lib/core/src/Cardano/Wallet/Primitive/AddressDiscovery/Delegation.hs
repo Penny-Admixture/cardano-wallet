@@ -146,7 +146,7 @@ lastActiveKey
     -> Maybe RewardAccount
 lastActiveKey s = accountAtIx s <$> lastActiveIx s
 
-data PointerUTxO = PointerUTxO TxIn Coin (Index 'Soft 'AddressK)
+data PointerUTxO = PointerUTxO TxIn Coin
     deriving (Generic, Eq, Show)
     deriving anyclass NFData
 
@@ -210,7 +210,7 @@ setPortfolioOf
     -> Maybe Tx
 setPortfolioOf s mkAddress isReg n =
     let s' = s { nextKeyIx = toEnum n }
-        mkTxIn (PointerUTxO i c _) = (i, c)
+        mkTxIn (PointerUTxO i c) = (i, c)
 
         minUTxOVal = Coin 1 -- FIXME
         -- TODO: Need to rely on wallet to return as change, if the minUTxOVal
@@ -286,7 +286,7 @@ applyTx (Tx cs _ins outs) h s0 =
     in case pointerOuts of
         [] -> s --error "panic: no pointer utxo on-chain" -- What should we do?
         [(ix,TxOut _addr tb)]
-            -> s { pointer = Just $ PointerUTxO (TxIn h ix) (TB.getCoin tb) (nextKeyIx s) }
+            -> s { pointer = Just $ PointerUTxO (TxIn h ix) (TB.getCoin tb) }
         (_x:_) -> error "todo"
             -- There shouldn't be more than one pointer, but theoretically
             -- possible. If a user sends funds to an address corresponding to

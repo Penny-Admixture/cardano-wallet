@@ -270,7 +270,7 @@ instance Buildable (DelegationState StakeKey') where
         ]
 
 instance Buildable PointerUTxO where
-    build (PointerUTxO i _c ix) = "PointerUTxO " <> build i <> " " <> build (fromEnum ix)
+    build (PointerUTxO i _c) = "PointerUTxO " <> inF i
 
 instance Buildable Env where
     build env = "Env:\n" <> blockMapF
