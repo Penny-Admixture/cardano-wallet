@@ -1902,8 +1902,6 @@ components:
 
     x-txBody: &txBody
       oneOf:
-        # - <<: *ApiTransaction
-        #   title: Object
         - <<: *serializedHex
           title: Serialized transaction body
 
@@ -2479,22 +2477,11 @@ components:
             passphrase:
               <<: *lenientPassphrase
               description: The wallet's master passphrase.
-        - oneOf:
-            - type: object
-              required:
-                - tx
-              properties:
-                tx:
-                  oneOf:
-                    # - <<: *ApiSignedTransaction
-                    #   title: Object
-                    - type: string
-                      format: hex
-            - type: object
-              required:
-                - tx_body
-              properties:
-                tx_body: *txBody
+        - type: object
+          required:
+            - tx_body
+          properties:
+            tx_body: *txBody
 
     # ADP-908 Deprecated
     ApiPostTransactionDataByron: &ApiPostTransactionDataByron
@@ -4435,7 +4422,7 @@ paths:
       tags: ["Transactions"]
       summary: Sign
       description: |
-        <p align="right">status: <strong>stable</strong></p>
+        <p align="right">status: <strong>under development</strong></p>
 
         Sign a transaction body and return the full transaction. That
         is, create witnesses using the keys available to this wallet
@@ -5223,7 +5210,7 @@ paths:
       tags: ["Transactions"]
       summary: Submit Transaction
       description: |
-        <p align="right">status: <strong>stable</strong></p>
+        <p align="right">status: <strong>under development</strong></p>
 
         Submits a signed and encoded transaction to the Cardano
         network.
@@ -5231,10 +5218,8 @@ paths:
         content:
           application/json:
             schema: *ApiSignedTransaction
-          # application/cbor+cardano-tx:
           application/octet-stream:
             schema: *signedTransactionBlob
-          # TODO: ADP-902 json-encoded variants
       responses: *responsesPostSignedTransaction
 
   /proxy/transactions:
@@ -5247,7 +5232,7 @@ paths:
 
         Submits a transaction that was created and signed outside of cardano-wallet.
 
-        NOTE: Unlike the postTransaction endpoint, there are no
+        NOTE: Unlike the postSignedTransaction endpoint, there are no
         guarantees that a transaction accepted by this endpoint will
         actually be included in the chain. It's up to the caller to
         retry submission until the transaction is confirmed.
