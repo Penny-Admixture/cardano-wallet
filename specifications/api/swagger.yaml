@@ -1910,7 +1910,7 @@ components:
       items: *serializedHex
       title: Serialized transaction witnesses
 
-    ApiSignedTransaction: &ApiSignedTransaction
+    ApiSerialisedTransaction: &ApiSerialisedTransaction
       oneOf:
         - <<: *serializedHex
           title: Serialized transaction
@@ -2469,19 +2469,15 @@ components:
           description: A master passphrase to lock and protect the wallet for sensitive operation (e.g. sending funds).
 
     ApiPostSignTransactionData: &ApiPostSignTransactionData
-      allOf:
-        - type: object
-          required:
-            - passphrase
-          properties:
-            passphrase:
-              <<: *lenientPassphrase
-              description: The wallet's master passphrase.
-        - type: object
-          required:
-            - tx_body
-          properties:
-            tx_body: *txBody
+      type: object
+      required:
+        - passphrase
+        - tx_body
+      properties:
+        passphrase:
+          <<: *lenientPassphrase
+          description: The wallet's master passphrase.
+        tx_body: *txBody
 
     # ADP-908 Deprecated
     ApiPostTransactionDataByron: &ApiPostTransactionDataByron
@@ -3901,7 +3897,7 @@ x-responsesPostSignTransaction: &responsesPostSignedTransaction
     description: Accepted
     content:
       application/json:
-        schema: *ApiSignedTransaction
+        schema: *ApiSerialisedTransaction
       application/octet-stream:
         schema: *signedTransactionBlob
 
@@ -5217,7 +5213,7 @@ paths:
       requestBody:
         content:
           application/json:
-            schema: *ApiSignedTransaction
+            schema: *ApiSerialisedTransaction
           application/octet-stream:
             schema: *signedTransactionBlob
       responses: *responsesPostSignedTransaction
