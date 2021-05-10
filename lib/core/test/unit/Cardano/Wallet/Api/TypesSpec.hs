@@ -136,8 +136,9 @@ import Cardano.Wallet.Api.Types
     , HealthCheckSMASH (..)
     , Iso8601Time (..)
     , NtpSyncingStatus (..)
-    , PostTransactionData (..)
-    , PostTransactionFeeData (..)
+    , PostSignTransactionData (..)
+    , PostTransactionFeeOldData (..)
+    , PostTransactionOldData (..)
     , SettingsPutData (..)
     , SomeByronWalletPostData (..)
     , WalletOrAccountPostData (..)
@@ -425,8 +426,9 @@ spec = parallel $ do
             jsonRoundtripAndGolden $ Proxy @ApiStakePoolMetrics
             jsonRoundtripAndGolden $ Proxy @ApiTxId
             jsonRoundtripAndGolden $ Proxy @ApiVerificationKey
-            jsonRoundtripAndGolden $ Proxy @(PostTransactionData ('Testnet 0))
-            jsonRoundtripAndGolden $ Proxy @(PostTransactionFeeData ('Testnet 0))
+            jsonRoundtripAndGolden $ Proxy @PostSignTransactionData
+            jsonRoundtripAndGolden $ Proxy @(PostTransactionOldData ('Testnet 0))
+            jsonRoundtripAndGolden $ Proxy @(PostTransactionFeeOldData ('Testnet 0))
             jsonRoundtripAndGolden $ Proxy @WalletPostData
             jsonRoundtripAndGolden $ Proxy @AccountPostData
             jsonRoundtripAndGolden $ Proxy @WalletOrAccountPostData
@@ -926,24 +928,32 @@ spec = parallel $ do
                     }
             in
                 x' === x .&&. show x' === show x
-        it "PostTransactionData" $ property $ \x ->
+        it "PostSignTransactionData" $ property $ \x ->
             let
-                x' = PostTransactionData
-                    { payments = payments (x :: PostTransactionData ('Testnet 0))
-                    , passphrase = passphrase (x :: PostTransactionData ('Testnet 0))
-                    , withdrawal = withdrawal (x :: PostTransactionData ('Testnet 0))
-                    , metadata = metadata (x :: PostTransactionData ('Testnet 0))
-                    , timeToLive = timeToLive (x :: PostTransactionData ('Testnet 0))
+                x' = PostSignTransactionData
+                    { txBody = txBody (x :: PostSignTransactionData)
+                    , passphrase = passphrase (x :: PostSignTransactionData)
                     }
             in
                 x' === x .&&. show x' === show x
-        it "PostTransactionFeeData" $ property $ \x ->
+        it "PostTransactionOldData" $ property $ \x ->
             let
-                x' = PostTransactionFeeData
-                    { payments = payments (x :: PostTransactionFeeData ('Testnet 0))
-                    , withdrawal = withdrawal (x :: PostTransactionFeeData ('Testnet 0))
-                    , metadata = metadata (x :: PostTransactionFeeData ('Testnet 0))
-                    , timeToLive = timeToLive (x :: PostTransactionFeeData ('Testnet 0))
+                x' = PostTransactionOldData
+                    { payments = payments (x :: PostTransactionOldData ('Testnet 0))
+                    , passphrase = passphrase (x :: PostTransactionOldData ('Testnet 0))
+                    , withdrawal = withdrawal (x :: PostTransactionOldData ('Testnet 0))
+                    , metadata = metadata (x :: PostTransactionOldData ('Testnet 0))
+                    , timeToLive = timeToLive (x :: PostTransactionOldData ('Testnet 0))
+                    }
+            in
+                x' === x .&&. show x' === show x
+        it "PostTransactionFeeOldData" $ property $ \x ->
+            let
+                x' = PostTransactionFeeOldData
+                    { payments = payments (x :: PostTransactionFeeOldData ('Testnet 0))
+                    , withdrawal = withdrawal (x :: PostTransactionFeeOldData ('Testnet 0))
+                    , metadata = metadata (x :: PostTransactionFeeOldData ('Testnet 0))
+                    , timeToLive = timeToLive (x :: PostTransactionFeeOldData ('Testnet 0))
                     }
             in
                 x' === x .&&. show x' === show x
@@ -1756,8 +1766,11 @@ instance Arbitrary a => Arbitrary (AddressAmount a) where
     arbitrary = applyArbitrary3 AddressAmount
     shrink _ = []
 
-instance Arbitrary (PostTransactionData t) where
-    arbitrary = PostTransactionData
+instance Arbitrary PostSignTransactionData where
+    arbitrary = PostSignTransactionData <$> arbitrary <*> arbitrary
+
+instance Arbitrary (PostTransactionOldData t) where
+    arbitrary = PostTransactionOldData
         <$> arbitrary
         <*> arbitrary
         <*> elements [Just SelfWithdrawal, Nothing]
@@ -1774,8 +1787,8 @@ instance Arbitrary (ApiPutAddressesData t) where
         addrs <- vector n
         pure $ ApiPutAddressesData ((, Proxy @t) <$> addrs)
 
-instance Arbitrary (PostTransactionFeeData t) where
-    arbitrary = PostTransactionFeeData
+instance Arbitrary (PostTransactionFeeOldData t) where
+    arbitrary = PostTransactionFeeOldData
         <$> arbitrary
         <*> elements [Just SelfWithdrawal, Nothing]
         <*> arbitrary
@@ -2121,12 +2134,18 @@ instance ToSchema ByronWalletPutPassphraseData where
 instance ToSchema ApiTxMetadata where
     declareNamedSchema _ = declareSchemaForDefinition "TransactionMetadataValue"
 
-instance ToSchema (PostTransactionData t) where
+instance ToSchema PostSignTransactionData where
+    declareNamedSchema _ = declareSchemaForDefinition "ApiPostSignTransactionData"
+
+instance ToSchema ApiSerialisedTransaction where
+    declareNamedSchema _ = declareSchemaForDefinition "ApiSerialisedTransaction"
+
+instance ToSchema (PostTransactionOldData t) where
     declareNamedSchema _ = do
         addDefinition =<< declareSchemaForDefinition "TransactionMetadataValue"
         declareSchemaForDefinition "ApiPostTransactionData"
 
-instance ToSchema (PostTransactionFeeData t) where
+instance ToSchema (PostTransactionFeeOldData t) where
     declareNamedSchema _ = do
         addDefinition =<< declareSchemaForDefinition "TransactionMetadataValue"
         declareSchemaForDefinition "ApiPostTransactionFeeData"

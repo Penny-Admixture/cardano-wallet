@@ -453,32 +453,50 @@ instance
 
 instance
     ( ReflectMethod m
+    ) => GEveryEndpoints (Verb (m :: StdMethod) s '[] a)
+  where
+    gEveryEndpoint _ = []
+
+    type MkPathRequest (Verb m s '[] a) = [Request]
+    gEveryPathParam _ req =
+        [req { requestMethod = reflectMethod (Proxy @m) }]
+
+    type MkBodyRequest (Verb m s '[] a) = [Request]
+    gEveryBodyParam _ req =
+        [req { requestMethod = reflectMethod (Proxy @m) }]
+
+    type MkHeaderRequest (Verb m s '[] a) = [Request]
+    gEveryHeader _ req =
+        [req { requestMethod = reflectMethod (Proxy @m) }]
+
+instance
+    ( ReflectMethod m
     , Accept ct
-    ) => GEveryEndpoints (Verb (m :: StdMethod) s '[ct] a)
+    , GEveryEndpoints (Verb m s cts a)
+    ) => GEveryEndpoints (Verb (m :: StdMethod) s (ct ': cts) a)
   where
     gEveryEndpoint _ =
-        [ defaultRequest
+        ( defaultRequest
             { requestMethod = reflectMethod $ Proxy @m
             , requestHeaders =
                 [ (hAccept, renderHeader $ contentType $ Proxy @ct)
                 ]
             }
-        ]
+        : gEveryEndpoint (Proxy @(Verb m s cts a) ) )
 
-    type MkPathRequest (Verb m s '[ct] a) = [Request]
+    type MkPathRequest (Verb m s (ct ': cts) a) = [Request]
     gEveryPathParam _ req =
         [req { requestMethod = reflectMethod (Proxy @m) }]
 
-    type MkBodyRequest (Verb m s '[ct] a) = [Request]
+    type MkBodyRequest (Verb m s (ct ': cts) a) = [Request]
     gEveryBodyParam _ req =
         [req { requestMethod = reflectMethod (Proxy @m) }]
 
-    type MkHeaderRequest (Verb m s '[ct] a) = Header "Accept" ct -> [Request]
+    type MkHeaderRequest (Verb m s (ct ': cts) a) = Header "Accept" ct -> [Request]
     gEveryHeader _ req (Header h) =
         [req { requestMethod = reflectMethod $ Proxy @m
              , requestHeaders = requestHeaders req ++ [ (hAccept, h) ]
-             }
-        ]
+             }]
 
 
 instance
