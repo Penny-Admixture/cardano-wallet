@@ -281,7 +281,7 @@ server byron icarus shelley multisig spl ntp =
 
     shelleyTransactions :: Server (Transactions n)
     shelleyTransactions =
-        postSignTransaction shelley
+        postSignTransaction @_ @_ @_ @n shelley
         :<|> postTransactionOld shelley (delegationAddress @n)
         :<|> listTransactions shelley
         :<|> postTransactionFeeOld shelley
@@ -411,8 +411,8 @@ server byron icarus shelley multisig spl ntp =
     byronTransactions :: Server (ByronTransactions n)
     byronTransactions =
              (\wid tx -> withLegacyLayer wid
-                 (byron, postSignTransaction byron wid tx)
-                 (icarus, postSignTransaction icarus wid tx)
+                 (byron, postSignTransaction @_ @_ @_ @n byron wid tx)
+                 (icarus, postSignTransaction @_ @_ @_ @n icarus wid tx)
              )
          :<|>
              (\wid tx -> withLegacyLayer wid

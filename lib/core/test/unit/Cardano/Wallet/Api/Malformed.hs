@@ -58,6 +58,7 @@ import Cardano.Wallet.Api.Types
     , ApiPostRandomAddressData
     , ApiPutAddressesData
     , ApiSelectCoinsData
+    , ApiSerialisedTransaction
     , ApiSharedWalletPatchData
     , ApiSharedWalletPostData
     , ApiSlotReference
@@ -68,7 +69,6 @@ import Cardano.Wallet.Api.Types
     , ApiWalletPassphrase
     , ApiWalletSignData
     , ByronWalletPutPassphraseData
-    , PostExternalTransactionData
     , PostTransactionData
     , PostTransactionFeeData
     , SettingsPutData (..)
@@ -1296,7 +1296,7 @@ instance Malformed (BodyParam ApiSlotReference) where
               )
             ]
 
-instance Malformed (BodyParam PostExternalTransactionData)
+instance Malformed (BodyParam ApiSerialisedTransaction)
 -- no cases here as all bad requests are served by ErrDecodeSignedTxWrongPayload
 -- in Server.hs. Tested by integration tests.
 

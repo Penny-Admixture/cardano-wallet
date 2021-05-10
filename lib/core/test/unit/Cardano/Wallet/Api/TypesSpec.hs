@@ -92,6 +92,7 @@ import Cardano.Wallet.Api.Types
     , ApiSelectCoinsAction (..)
     , ApiSelectCoinsData (..)
     , ApiSelectCoinsPayments (..)
+    , ApiSerialisedTransaction (..)
     , ApiSharedWallet (..)
     , ApiSharedWalletPatchData (..)
     , ApiSharedWalletPostData (..)
@@ -135,7 +136,6 @@ import Cardano.Wallet.Api.Types
     , HealthCheckSMASH (..)
     , Iso8601Time (..)
     , NtpSyncingStatus (..)
-    , PostExternalTransactionData (..)
     , PostTransactionData (..)
     , PostTransactionFeeData (..)
     , SettingsPutData (..)
@@ -947,10 +947,10 @@ spec = parallel $ do
                     }
             in
                 x' === x .&&. show x' === show x
-        it "PostExternalTransactionData" $ property $ \x ->
+        it "ApiSerialisedTransaction" $ property $ \x ->
             let
-                x' = PostExternalTransactionData
-                    { payload = payload (x :: PostExternalTransactionData)
+                x' = ApiSerialisedTransaction
+                    { payload = payload (x :: ApiSerialisedTransaction)
                     }
             in
                 x' === x .&&. show x' === show x
@@ -1781,13 +1781,13 @@ instance Arbitrary (PostTransactionFeeData t) where
         <*> arbitrary
         <*> arbitrary
 
-instance Arbitrary PostExternalTransactionData where
+instance Arbitrary ApiSerialisedTransaction where
     arbitrary = do
         count <- choose (0, 32)
         bytes <- BS.pack <$> replicateM count arbitrary
-        return $ PostExternalTransactionData bytes
-    shrink (PostExternalTransactionData bytes) =
-        PostExternalTransactionData . BS.pack <$> shrink (BS.unpack bytes)
+        return $ ApiSerialisedTransaction bytes
+    shrink (ApiSerialisedTransaction bytes) =
+        ApiSerialisedTransaction . BS.pack <$> shrink (BS.unpack bytes)
 
 instance Arbitrary TxMetadata where
     arbitrary = genTxMetadata

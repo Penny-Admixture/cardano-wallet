@@ -71,7 +71,7 @@ import Cardano.Wallet.Api.Types
     , ApiPostRandomAddressData
     , ApiPutAddressesDataT
     , ApiSelectCoinsDataT
-    , ApiSignedTransaction
+    , ApiSerialisedTransaction
     , ApiT (..)
     , ApiTransactionT
     , ApiTxId (..)
@@ -80,8 +80,7 @@ import Cardano.Wallet.Api.Types
     , ApiWalletPassphrase
     , ByronWalletPutPassphraseData (..)
     , Iso8601Time (..)
-    , PostExternalTransactionData (..)
-    , PostSignTransactionDataT
+    , PostSignTransactionData
     , PostTransactionFeeOldDataT
     , PostTransactionOldDataT
     , WalletPutData (..)
@@ -154,8 +153,8 @@ data TransactionClient = TransactionClient
         -> ClientM [ApiTransactionT Aeson.Value]
     , postSignTransaction
         :: ApiT WalletId
-        -> PostSignTransactionDataT Aeson.Value
-        -> ClientM ApiSignedTransaction
+        -> PostSignTransactionData
+        -> ClientM ApiSerialisedTransaction
     , postTransaction
         :: ApiT WalletId
         -> PostTransactionOldDataT Aeson.Value
@@ -165,7 +164,7 @@ data TransactionClient = TransactionClient
         -> PostTransactionFeeOldDataT Aeson.Value
         -> ClientM ApiFee
     , postExternalTransaction
-        :: PostExternalTransactionData
+        :: ApiSerialisedTransaction
         -> ClientM ApiTxId
     , deleteTransaction
         :: ApiT WalletId

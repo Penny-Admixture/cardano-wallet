@@ -181,7 +181,7 @@ import Cardano.Wallet.Api.Types
     , ByronWalletPutPassphraseData
     , Iso8601Time
     , MinWithdrawal
-    , PostSignTransactionDataT
+    , PostSignTransactionData
     , PostTransactionFeeOldDataT
     , PostTransactionOldDataT
     , SettingsPutData
@@ -467,7 +467,7 @@ type SignTransaction n = "wallets"
     :> Capture "walletId" (ApiT WalletId)
     :> "transactions"
     :> "sign"
-    :> ReqBody '[JSON] (PostSignTransactionDataT n)
+    :> ReqBody '[JSON] PostSignTransactionData
     :> PostAccepted '[JSON, OctetStream] ApiSerialisedTransaction
 
 -- | https://input-output-hk.github.io/cardano-wallet/api/#operation/postTransaction
@@ -762,7 +762,7 @@ type SignByronTransaction n = "byron-wallets"
     :> Capture "walletId" (ApiT WalletId)
     :> "transactions"
     :> "sign"
-    :> ReqBody '[JSON] (PostSignTransactionDataT n)
+    :> ReqBody '[JSON] PostSignTransactionData
     :> PostAccepted '[JSON, OctetStream] ApiSerialisedTransaction
 
 -- | https://input-output-hk.github.io/cardano-wallet/api/#operation/postByronTransaction

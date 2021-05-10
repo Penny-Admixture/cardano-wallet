@@ -172,7 +172,6 @@ module Cardano.Wallet.Api.Types
     , ApiCoinSelectionT
     , ApiSelectCoinsDataT
     , ApiTransactionT
-    , PostSignTransactionDataT
     , PostTransactionOldDataT
     , PostTransactionFeeOldDataT
     , ApiWalletMigrationPlanPostDataT
@@ -780,8 +779,7 @@ data ByronWalletPutPassphraseData = ByronWalletPutPassphraseData
     , newPassphrase :: !(ApiT (Passphrase "raw"))
     } deriving (Eq, Generic, Show)
 
--- TODO: NetworkDiscriminant may be unnecessary
-data PostSignTransactionData (n :: NetworkDiscriminant) = PostSignTransactionData
+data PostSignTransactionData = PostSignTransactionData
     { txBody :: !ApiSerialisedTransaction -- TODO: ADP-902 or tx
     , passphrase :: !(ApiT (Passphrase "lenient"))
     } deriving (Eq, Generic, Show)
@@ -1649,9 +1647,9 @@ instance EncodeStakeAddress n => ToJSON (ApiCoinSelectionWithdrawal n) where
     toJSON = genericToJSON defaultRecordTypeOptions
 
 instance FromJSON ApiRawMetadata where
-    parseJSON = fmap ApiRawMetadata . fromBase64Text
+    parseJSON = fmap ApiRawMetadata . fromBaseText Base64
 instance ToJSON ApiRawMetadata where
-    toJSON = toJSON . toBase64Text . unApiRawMetadata
+    toJSON = toBaseText Base64 . unApiRawMetadata
 
 instance {-# OVERLAPS #-} DecodeAddress n => FromJSON (ApiT Address, Proxy n)
   where
@@ -2080,9 +2078,14 @@ instance ToJSON (ApiT BoundType) where
 instance FromJSON (ApiT BoundType) where
     parseJSON = fmap ApiT . genericParseJSON defaultSumTypeOptions
 
-instance DecodeAddress t => FromJSON (PostSignTransactionData t) where
+instance FromJSON ApiSerialisedTransaction where
+    parseJSON = fmap ApiSerialisedTransaction . fromBaseText Base16
+instance ToJSON ApiSerialisedTransaction where
+    toJSON = toBaseText Base16 . view #payload
+
+instance FromJSON PostSignTransactionData where
     parseJSON = genericParseJSON defaultRecordTypeOptions
-instance EncodeAddress t => ToJSON (PostSignTransactionData t) where
+instance ToJSON PostSignTransactionData where
     toJSON = genericToJSON defaultRecordTypeOptions
 
 instance DecodeAddress t => FromJSON (PostTransactionOldData t) where
@@ -2637,12 +2640,12 @@ toTextJSON = toJSON . toText . getApiT
 fromTextJSON :: FromText a => String -> Value -> Aeson.Parser (ApiT a)
 fromTextJSON n = withText n (eitherToParser . bimap ShowFmt ApiT . fromText)
 
-fromBase64Text :: Value -> Aeson.Parser ByteString
-fromBase64Text = withText "Base64 ByteString" $
-    eitherToParser . convertFromBase Base64 . T.encodeUtf8
+fromBaseText :: Base -> Value -> Aeson.Parser ByteString
+fromBaseText base = withText (show base ++ " ByteString") $
+    eitherToParser . convertFromBase base . T.encodeUtf8
 
-toBase64Text :: ByteString -> Text
-toBase64Text = T.decodeUtf8 . convertToBase Base64
+toBaseText :: Base -> ByteString -> Value
+toBaseText base = String . T.decodeLatin1 . convertToBase base
 
 {-------------------------------------------------------------------------------
                           User-Facing Address Encoding
@@ -2690,7 +2693,6 @@ type family ApiAddressIdT (n :: k) :: Type
 type family ApiCoinSelectionT (n :: k) :: Type
 type family ApiSelectCoinsDataT (n :: k) :: Type
 type family ApiTransactionT (n :: k) :: Type
-type family PostSignTransactionDataT (n :: k) :: Type
 type family PostTransactionOldDataT (n :: k) :: Type
 type family PostTransactionFeeOldDataT (n :: k) :: Type
 type family ApiWalletMigrationPlanPostDataT (n :: k) :: Type
@@ -2714,9 +2716,6 @@ type instance ApiSelectCoinsDataT (n :: NetworkDiscriminant) =
 
 type instance ApiTransactionT (n :: NetworkDiscriminant) =
     ApiTransaction n
-
-type instance PostSignTransactionDataT (n :: NetworkDiscriminant) =
-    PostSignTransactionData n
 
 type instance PostTransactionOldDataT (n :: NetworkDiscriminant) =
     PostTransactionOldData n

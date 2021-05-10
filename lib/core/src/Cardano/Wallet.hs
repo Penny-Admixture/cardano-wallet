@@ -1445,8 +1445,7 @@ signTransaction
     -> ExceptT ErrSignPayment IO SealedTx
 signTransaction ctx wid mkRwdAcct pwd txBody = db & \DBLayer{..} -> do
     era <- liftIO $ currentNodeEra nl
-    -- (tx, binary) <- withExceptT ErrSubmitExternalTxDecode $ except $
-    --     decodeSignedTx tl era txBody
+    let _decoded = decodeSignedTx tl era txBody
     withRootKey @_ @s ctx wid pwd ErrSignPaymentWithRootKey $ \xprv scheme -> do
         let pwdP = preparePassphrase scheme pwd
         mapExceptT atomically $ do
@@ -1454,10 +1453,9 @@ signTransaction ctx wid mkRwdAcct pwd txBody = db & \DBLayer{..} -> do
                 readCheckpoint wid
             pp <- liftIO $ currentProtocolParameters nl
 
-            let keyFrom = isOwned (getState cp) (xprv, pwdP)
-            let rewardAcnt = mkRwdAcct (xprv, pwdP)
-
             -- TODO: ADP-919 implement this
+            let _keyFrom = isOwned (getState cp) (xprv, pwdP)
+            let _rewardAcnt = mkRwdAcct (xprv, pwdP)
             -- withExceptT ErrSignPaymentMkTx $ ExceptT $ pure $
             --     witnessTransaction tl rewardAcnt keyFrom txBody
             pure $ SealedTx txBody

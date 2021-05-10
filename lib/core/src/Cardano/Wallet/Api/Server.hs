@@ -207,12 +207,12 @@ import Cardano.Wallet.Api.Types
     , ApiPutAddressesData (..)
     , ApiRawMetadata (..)
     , ApiSelectCoinsPayments
+    , ApiSerialisedTransaction (..)
     , ApiSharedWallet (..)
     , ApiSharedWalletPatchData (..)
     , ApiSharedWalletPostData (..)
     , ApiSharedWalletPostDataFromAccountPubX (..)
     , ApiSharedWalletPostDataFromMnemonics (..)
-    , ApiSignedTransaction (..)
     , ApiSlotId (..)
     , ApiSlotReference (..)
     , ApiT (..)
@@ -242,7 +242,6 @@ import Cardano.Wallet.Api.Types
     , Iso8601Time (..)
     , KnownDiscovery (..)
     , MinWithdrawal (..)
-    , PostExternalTransactionData (..)
     , PostSignTransactionData (..)
     , PostTransactionFeeOldData (..)
     , PostTransactionOldData (..)
@@ -1690,7 +1689,7 @@ listAddresses ctx normalize (ApiT wid) stateFilter = do
 -------------------------------------------------------------------------------}
 
 postSignTransaction
-    :: forall ctx s k n.
+    :: forall ctx s k (n :: NetworkDiscriminant).
         ( ctx ~ ApiLayer s k
         , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
         , GenChange s
@@ -1703,17 +1702,17 @@ postSignTransaction
         )
     => ctx
     -> ApiT WalletId
-    -> PostSignTransactionData n
-    -> Handler (ApiSignedTransaction n)
+    -> PostSignTransactionData
+    -> Handler ApiSerialisedTransaction
 postSignTransaction ctx (ApiT wid) body = do
     let pwd = coerce $ body ^. #passphrase . #getApiT
-    let txBody = body ^. #txBody
+    let txBody = body ^. #txBody . #payload
 
     (_, mkRwdAcct) <- mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
 
     W.SealedTx sealedTx <- withWorkerCtx ctx wid liftE liftE $ \wrk ->
         liftHandler $ W.signTransaction @_ @s @k wrk wid mkRwdAcct pwd txBody
-    pure $ ApiSignedTransaction sealedTx
+    pure $ ApiSerialisedTransaction sealedTx
 
 postTransactionOld
     :: forall ctx s k n.
@@ -2138,9 +2137,9 @@ postExternalTransaction
         ( ctx ~ ApiLayer s k
         )
     => ctx
-    -> PostExternalTransactionData
+    -> ApiSerialisedTransaction
     -> Handler ApiTxId
-postExternalTransaction ctx (PostExternalTransactionData load) = do
+postExternalTransaction ctx (ApiSerialisedTransaction load) = do
     tx <- liftHandler $ W.submitExternalTx @ctx @k ctx load
     return $ ApiTxId (ApiT (txId tx))
 

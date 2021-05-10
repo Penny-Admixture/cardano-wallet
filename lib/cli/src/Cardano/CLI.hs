@@ -149,6 +149,7 @@ import Cardano.Wallet.Api.Types
     , ApiByronWallet
     , ApiMnemonicT (..)
     , ApiPostRandomAddressData (..)
+    , ApiSerialisedTransaction (..)
     , ApiT (..)
     , ApiTxId (ApiTxId)
     , ApiTxMetadata (..)
@@ -156,7 +157,6 @@ import Cardano.Wallet.Api.Types
     , ByronWalletPostData (..)
     , ByronWalletStyle (..)
     , Iso8601Time (..)
-    , PostExternalTransactionData (..)
     , SomeByronWalletPostData (..)
     , WalletOrAccountPostData (..)
     , WalletPostData (..)
@@ -860,7 +860,7 @@ cmdTransactionList mkTxClient =
 -- | Arguments for 'transaction submit' command
 data TransactionSubmitArgs = TransactionSubmitArgs
     { _port :: Port "Wallet"
-    , _payload :: PostExternalTransactionData
+    , _payload :: ApiSerialisedTransaction
     }
 
 cmdTransactionSubmit
@@ -1431,7 +1431,7 @@ accPubKeyArgument = argumentT $ mempty
     <> help "64-byte (128-character) hex-encoded public account key."
 
 -- | <payload=BINARY_BLOB>
-transactionSubmitPayloadArgument :: Parser PostExternalTransactionData
+transactionSubmitPayloadArgument :: Parser ApiSerialisedTransaction
 transactionSubmitPayloadArgument = argumentT $ mempty
     <> metavar "BINARY_BLOB"
     <> help "hex-encoded binary blob of externally-signed transaction."
