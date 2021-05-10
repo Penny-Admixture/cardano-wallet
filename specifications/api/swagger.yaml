@@ -1150,13 +1150,8 @@ x-transactionResolvedWithdrawals: &transactionResolvedWithdrawals
 
 x-serializedHex: &serializedHex
   description: Serialized data, hex encoded.
-  type: object
-  required:
-    - hex
-  properties:
-    hex:
-      type: string
-      format: hex
+  type: string
+  format: hex
 
 x-signedTransactionBlob: &signedTransactionBlob
   description: Signed transaction message binary blob.
@@ -5004,6 +4999,29 @@ paths:
           application/json:
             schema: *ApiPostTransactionFeeDataByron
       responses: *responsesPostTransactionFee
+
+  /byron-wallets/{walletId}/transactions/sign:
+    post:
+      operationId: postSignByronTransaction
+      tags: ["Byron Transactions"]
+      summary: Sign
+      description: |
+        <p align="right">status: <strong>under development</strong></p>
+
+        Sign a transaction body and return the full transaction. That
+        is, create witnesses using the keys available to this wallet
+        and attach them to the body.
+
+        If a full transaction is passed in the request, then witness
+        will be added to the existing witness set.
+      parameters:
+        - *parametersWalletId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *ApiPostSignTransactionData
+      responses: *responsesPostSignedTransaction
 
   /byron-wallets/{walletId}/transactions:
     post:
