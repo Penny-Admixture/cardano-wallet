@@ -784,7 +784,7 @@ data PostSignTransactionData = PostSignTransactionData
     , passphrase :: !(ApiT (Passphrase "lenient"))
     } deriving (Eq, Generic, Show)
 
-data PostTransactionOldData (n :: NetworkDiscriminant) = PostTransactionData
+data PostTransactionOldData (n :: NetworkDiscriminant) = PostTransactionOldData
     { payments :: !(NonEmpty (AddressAmount (ApiT Address, Proxy n)))
     , passphrase :: !(ApiT (Passphrase "lenient"))
     , withdrawal :: !(Maybe ApiWithdrawalPostData)

@@ -1692,9 +1692,7 @@ postSignTransaction
     :: forall ctx s k (n :: NetworkDiscriminant).
         ( ctx ~ ApiLayer s k
         , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
-        , GenChange s
         , HardDerivation k
-        , HasNetworkLayer IO ctx
         , IsOwned s k
         , Typeable n
         , Typeable s
