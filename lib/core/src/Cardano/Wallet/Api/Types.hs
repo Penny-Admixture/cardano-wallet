@@ -85,10 +85,9 @@ module Cardano.Wallet.Api.Types
     , SettingsPutData (..)
     , WalletPutPassphraseData (..)
     , PostSignTransactionData (..)
-    , ApiSignedTransaction (..)
     , PostTransactionOldData (..)
     , PostTransactionFeeOldData (..)
-    , PostExternalTransactionData (..)
+    , ApiSerialisedTransaction (..)
     , ApiTransaction (..)
     , ApiWithdrawalPostData (..)
     , ApiMaintenanceAction (..)
@@ -173,7 +172,6 @@ module Cardano.Wallet.Api.Types
     , ApiCoinSelectionT
     , ApiSelectCoinsDataT
     , ApiTransactionT
-    , ApiSignedTransactionT
     , PostSignTransactionDataT
     , PostTransactionOldDataT
     , PostTransactionFeeOldDataT
@@ -784,7 +782,7 @@ data ByronWalletPutPassphraseData = ByronWalletPutPassphraseData
 
 -- TODO: NetworkDiscriminant may be unnecessary
 data PostSignTransactionData (n :: NetworkDiscriminant) = PostSignTransactionData
-    { txBody :: !ByteString -- TODO: ADP-902 or tx
+    { txBody :: !ApiSerialisedTransaction -- TODO: ADP-902 or tx
     , passphrase :: !(ApiT (Passphrase "lenient"))
     } deriving (Eq, Generic, Show)
 
@@ -803,7 +801,7 @@ data PostTransactionFeeOldData (n :: NetworkDiscriminant) = PostTransactionFeeOl
     , timeToLive :: !(Maybe (Quantity "second" NominalDiffTime))
     } deriving (Eq, Generic, Show)
 
-newtype PostExternalTransactionData = PostExternalTransactionData
+newtype ApiSerialisedTransaction = ApiSerialisedTransaction
     { payload :: ByteString
     } deriving (Eq, Generic, Show)
 
@@ -889,11 +887,6 @@ data ApiTransaction (n :: NetworkDiscriminant) = ApiTransaction
     , mint :: !(ApiT W.TokenMap)
     , status :: !(ApiT TxStatus)
     , metadata :: !ApiTxMetadata
-    } deriving (Eq, Generic, Show)
-      deriving anyclass NFData
-
-newtype ApiSignedTransaction (n :: NetworkDiscriminant) = ApiSignedTransaction
-    { signedTx :: ByteString
     } deriving (Eq, Generic, Show)
       deriving anyclass NFData
 
@@ -2087,6 +2080,11 @@ instance ToJSON (ApiT BoundType) where
 instance FromJSON (ApiT BoundType) where
     parseJSON = fmap ApiT . genericParseJSON defaultSumTypeOptions
 
+instance DecodeAddress t => FromJSON (PostSignTransactionData t) where
+    parseJSON = genericParseJSON defaultRecordTypeOptions
+instance EncodeAddress t => ToJSON (PostSignTransactionData t) where
+    toJSON = genericToJSON defaultRecordTypeOptions
+
 instance DecodeAddress t => FromJSON (PostTransactionOldData t) where
     parseJSON = genericParseJSON defaultRecordTypeOptions
 instance EncodeAddress t => ToJSON (PostTransactionOldData t) where
@@ -2507,12 +2505,11 @@ instance FromText (AddressAmount Text) where
             [l, r] -> AddressAmount r <$> fromText l <*> pure mempty
             _ -> err
 
-instance FromText PostExternalTransactionData where
-    fromText text = case convertFromBase Base16 (T.encodeUtf8 text) of
-        Left _ ->
-            Left $ TextDecodingError "Parse error. Expecting hex-encoded format."
-        Right load ->
-            pure $ PostExternalTransactionData load
+instance FromText ApiSerialisedTransaction where
+    fromText = bimap (const errMsg) ApiSerialisedTransaction
+        . convertFromBase Base16 . T.encodeUtf8
+      where
+        errMsg = TextDecodingError "Parse error. Expecting hex-encoded format."
 
 instance FromText AnyAddress where
     fromText txt = case detectEncoding (T.unpack txt) of
@@ -2554,12 +2551,11 @@ instance FromText a => FromHttpApiData (ApiT a) where
 instance ToText a => ToHttpApiData (ApiT a) where
     toUrlPiece = toText . getApiT
 
-instance MimeUnrender OctetStream PostExternalTransactionData where
-    mimeUnrender _ =
-        pure . PostExternalTransactionData . BL.toStrict
+instance MimeUnrender OctetStream ApiSerialisedTransaction where
+    mimeUnrender _ = pure . ApiSerialisedTransaction . BL.toStrict
 
-instance MimeRender OctetStream PostExternalTransactionData where
-   mimeRender _ (PostExternalTransactionData val) = BL.fromStrict val
+instance MimeRender OctetStream ApiSerialisedTransaction where
+   mimeRender _ (ApiSerialisedTransaction val) = BL.fromStrict val
 
 instance FromHttpApiData ApiTxId where
     parseUrlPiece txt = case fromText txt of
@@ -2694,7 +2690,6 @@ type family ApiAddressIdT (n :: k) :: Type
 type family ApiCoinSelectionT (n :: k) :: Type
 type family ApiSelectCoinsDataT (n :: k) :: Type
 type family ApiTransactionT (n :: k) :: Type
-type family ApiSignedTransactionT (n :: k) :: Type
 type family PostSignTransactionDataT (n :: k) :: Type
 type family PostTransactionOldDataT (n :: k) :: Type
 type family PostTransactionFeeOldDataT (n :: k) :: Type
@@ -2719,9 +2714,6 @@ type instance ApiSelectCoinsDataT (n :: NetworkDiscriminant) =
 
 type instance ApiTransactionT (n :: NetworkDiscriminant) =
     ApiTransaction n
-
-type instance ApiSignedTransactionT (n :: NetworkDiscriminant) =
-    ApiSignedTransaction n
 
 type instance PostSignTransactionDataT (n :: NetworkDiscriminant) =
     PostSignTransactionData n

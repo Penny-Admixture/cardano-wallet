@@ -163,10 +163,10 @@ import Cardano.Wallet.Api.Types
     , ApiPostRandomAddressData
     , ApiPutAddressesDataT
     , ApiSelectCoinsDataT
+    , ApiSerialisedTransaction
     , ApiSharedWallet
     , ApiSharedWalletPatchData
     , ApiSharedWalletPostData
-    , ApiSignedTransactionT
     , ApiT
     , ApiTransactionT
     , ApiTxId
@@ -181,7 +181,6 @@ import Cardano.Wallet.Api.Types
     , ByronWalletPutPassphraseData
     , Iso8601Time
     , MinWithdrawal
-    , PostExternalTransactionData
     , PostSignTransactionDataT
     , PostTransactionFeeOldDataT
     , PostTransactionOldDataT
@@ -469,7 +468,7 @@ type SignTransaction n = "wallets"
     :> "transactions"
     :> "sign"
     :> ReqBody '[JSON] (PostSignTransactionDataT n)
-    :> PostAccepted '[JSON, OctetStream] (ApiSignedTransactionT n)
+    :> PostAccepted '[JSON, OctetStream] ApiSerialisedTransaction
 
 -- | https://input-output-hk.github.io/cardano-wallet/api/#operation/postTransaction
 type CreateTransactionOld n = "wallets"
@@ -764,7 +763,7 @@ type SignByronTransaction n = "byron-wallets"
     :> "transactions"
     :> "sign"
     :> ReqBody '[JSON] (PostSignTransactionDataT n)
-    :> PostAccepted '[JSON, OctetStream] (ApiSignedTransactionT n)
+    :> PostAccepted '[JSON, OctetStream] ApiSerialisedTransaction
 
 -- | https://input-output-hk.github.io/cardano-wallet/api/#operation/postByronTransaction
 type CreateByronTransactionOld n = "byron-wallets"
@@ -918,7 +917,7 @@ type Proxy_ =
 -- | https://input-output-hk.github.io/cardano-wallet/api/#operation/postExternalTransaction
 type PostExternalTransaction = "proxy"
     :> "transactions"
-    :> ReqBody '[OctetStream] PostExternalTransactionData
+    :> ReqBody '[OctetStream] ApiSerialisedTransaction
     :> PostAccepted '[JSON] ApiTxId
 
 {-------------------------------------------------------------------------------
