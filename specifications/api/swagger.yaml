@@ -4386,8 +4386,10 @@ paths:
   /wallets/{walletId}/payment-fees:
     post:
       operationId: postTransactionFee
-      tags: ["Legacy Transactions"]
+      tags: ["Transactions"]
       summary: Estimate Fee
+      # ADP-908 - Deprecated soon
+      deprecated: false
       description: |
         <p align="right">status: <strong>stable</strong></p>
 
@@ -4414,7 +4416,7 @@ paths:
   /wallets/{walletId}/transactions/sign:
     post:
       operationId: postSignTransaction
-      tags: ["Transactions"]
+      tags: ["Transactions New"]
       summary: Sign
       description: |
         <p align="right">status: <strong>under development</strong></p>
@@ -4423,8 +4425,8 @@ paths:
         is, create witnesses using the keys available to this wallet
         and attach them to the body.
 
-        If a full transaction is passed in the request, then witness
-        will be added to the existing witness set.
+        If a full transaction is passed in the request, then new
+        witnesses will be added to the existing witness set.
       parameters:
         - *parametersWalletId
       requestBody:
@@ -4437,10 +4439,12 @@ paths:
   /wallets/{walletId}/transactions:
     post:
       operationId: postTransaction
-      tags: ["Legacy Transactions"]
+      tags: ["Transactions"]
       summary: Create
+      # ADP-908 - Deprecated soon
+      deprecated: false
       description: |
-        <p align="right">status: <strong>deprecated</strong></p>
+        <p align="right">status: <strong>stable</strong></p>
 
         Create and send transaction from the wallet.
       parameters:
@@ -4600,8 +4604,9 @@ paths:
     get:
       operationId: getDelegationFee
       tags: ["Stake Pools"]
-
       summary: Estimate Fee
+      # ADP-908 - Deprecated soon
+      deprecated: false
       description: |
         <p align="right">status: <strong>stable</strong></p>
 
@@ -4991,6 +4996,8 @@ paths:
       operationId: postByronTransactionFee
       tags: ["Byron Transactions"]
       summary: Estimate Fee
+      # ADP-908 - Deprecated soon
+      deprecated: false
       description: |
         <p align="right">status: <strong>stable</strong></p>
 
@@ -5007,7 +5014,7 @@ paths:
   /byron-wallets/{walletId}/transactions/sign:
     post:
       operationId: postSignByronTransaction
-      tags: ["Byron Transactions"]
+      tags: ["Transactions New"]
       summary: Sign
       description: |
         <p align="right">status: <strong>under development</strong></p>
@@ -5016,8 +5023,8 @@ paths:
         is, create witnesses using the keys available to this wallet
         and attach them to the body.
 
-        If a full transaction is passed in the request, then witness
-        will be added to the existing witness set.
+        If a full transaction is passed in the request, then new
+        witnesses will be added to the existing witness set.
       parameters:
         - *parametersWalletId
       requestBody:
@@ -5225,13 +5232,21 @@ paths:
   /transactions:
     post:
       operationId: postSignedTransaction
-      tags: ["Transactions"]
+      tags: ["Transactions New"]
       summary: Submit Transaction
       description: |
         <p align="right">status: <strong>under development</strong></p>
 
         Submits a signed and encoded transaction to the Cardano
         network.
+
+        While the wallet server is running, posting a transaction
+        through this endpoint will be reliable in the face of
+        rollbacks and network errors.
+
+        The wallet server will retry submission of pending
+        transactions either until they expire, or until they can no
+        longer be rolled back.
       requestBody:
         content:
           application/json:
@@ -5243,10 +5258,12 @@ paths:
   /proxy/transactions:
     post:
       operationId: postExternalTransaction
-      tags: ["Legacy Transactions"]
+      tags: ["Transactions"]
       summary: Submit External Transaction
+      # ADP-908 - deprecated soon
+      deprecated: false
       description: |
-        <p align="right">status: <strong>deprecated</strong></p>
+        <p align="right">status: <strong>stable</strong></p>
 
         Submits a transaction that was created and signed outside of cardano-wallet.
 
