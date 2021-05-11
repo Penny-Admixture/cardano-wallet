@@ -26,6 +26,8 @@ module Cardano.Wallet.Primitive.Types.Tx
     , TxMetadataValue (..)
     , TxStatus (..)
     , SealedTx (..)
+    , SerialisedTx (..)
+    , SerialisedTxParts (..)
     , UnsignedTx (..)
     , TransactionInfo (..)
     , Direction (..)
@@ -403,6 +405,20 @@ instance Buildable a => Buildable (WithDirection a) where
 newtype SealedTx = SealedTx { getSealedTx :: ByteString }
     deriving stock (Show, Eq, Generic)
     deriving newtype (ByteArrayAccess, NFData)
+
+-- | A serialised transaction that may be only partially signed, or even
+-- invalid.
+newtype SerialisedTx = SerialisedTx { payload :: ByteString }
+    deriving stock (Show, Eq, Generic)
+    deriving newtype (ByteArrayAccess, NFData)
+
+-- | @SerialisedTxParts@ is a serialised transaction body, and a possibly
+-- incomplete set of serialised witnesses.
+data SerialisedTxParts = SerialisedTxParts
+    { serialisedTxBody :: ByteString
+    , serialisedTxWitnesses :: [ByteString]
+    }
+    deriving stock (Show, Eq, Generic)
 
 -- | True if the given metadata refers to a pending transaction
 isPending :: TxMeta -> Bool

@@ -94,6 +94,7 @@ import Cardano.Wallet.Api.Server
     , postRandomWalletFromXPrv
     , postSharedWallet
     , postSignTransaction
+    , postSignTransactionParts
     , postTransactionFeeOld
     , postTransactionOld
     , postTrezorWallet
@@ -281,7 +282,8 @@ server byron icarus shelley multisig spl ntp =
 
     shelleyTransactions :: Server (Transactions n)
     shelleyTransactions =
-        postSignTransaction @_ @_ @_ @n shelley
+        (\wid p -> postSignTransaction @_ @_ @_ @n shelley wid p
+              :<|> postSignTransactionParts @_ @_ @_ @n shelley wid p)
         :<|> postTransactionOld shelley (delegationAddress @n)
         :<|> listTransactions shelley
         :<|> postTransactionFeeOld shelley
@@ -410,9 +412,14 @@ server byron icarus shelley multisig spl ntp =
 
     byronTransactions :: Server (ByronTransactions n)
     byronTransactions =
-             (\wid tx -> withLegacyLayer wid
+             (\wid tx ->
+                 withLegacyLayer wid
                  (byron, postSignTransaction @_ @_ @_ @n byron wid tx)
                  (icarus, postSignTransaction @_ @_ @_ @n icarus wid tx)
+                 :<|>
+                 withLegacyLayer wid
+                 (byron, postSignTransactionParts @_ @_ @_ @n byron wid tx)
+                 (icarus, postSignTransactionParts @_ @_ @_ @n icarus wid tx)
              )
          :<|>
              (\wid tx -> withLegacyLayer wid

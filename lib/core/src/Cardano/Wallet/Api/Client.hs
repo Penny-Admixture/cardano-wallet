@@ -71,7 +71,6 @@ import Cardano.Wallet.Api.Types
     , ApiPostRandomAddressData
     , ApiPutAddressesDataT
     , ApiSelectCoinsDataT
-    , ApiSerialisedTransaction
     , ApiT (..)
     , ApiTransactionT
     , ApiTxId (..)
@@ -92,6 +91,8 @@ import Cardano.Wallet.Primitive.Types.Address
     ( AddressState )
 import Cardano.Wallet.Primitive.Types.Coin
     ( Coin (..) )
+import Cardano.Wallet.Primitive.Types.Tx
+    ( SerialisedTx, SerialisedTxParts )
 import Control.Monad
     ( void )
 import Data.Coerce
@@ -154,7 +155,11 @@ data TransactionClient = TransactionClient
     , postSignTransaction
         :: ApiT WalletId
         -> PostSignTransactionData
-        -> ClientM ApiSerialisedTransaction
+        -> ClientM (ApiT SerialisedTx)
+    , postSignTransactionParts
+        :: ApiT WalletId
+        -> PostSignTransactionData
+        -> ClientM (ApiT SerialisedTxParts)
     , postTransaction
         :: ApiT WalletId
         -> PostTransactionOldDataT Aeson.Value
@@ -164,7 +169,7 @@ data TransactionClient = TransactionClient
         -> PostTransactionFeeOldDataT Aeson.Value
         -> ClientM ApiFee
     , postExternalTransaction
-        :: ApiSerialisedTransaction
+        :: ApiT SerialisedTx
         -> ClientM ApiTxId
     , deleteTransaction
         :: ApiT WalletId
@@ -278,7 +283,7 @@ transactionClient
     :: TransactionClient
 transactionClient =
     let
-        _postSignTransaction
+        _postSignTransactions
             :<|> _postTransaction
             :<|> _listTransactions
             :<|> _postTransactionFee
@@ -286,12 +291,18 @@ transactionClient =
             :<|> _getTransaction
             = client (Proxy @("v2" :> (Transactions Aeson.Value)))
 
+        _postSignTransaction wid p = ep
+            where ep :<|> _ = _postSignTransactions wid p
+        _postSignTransactionParts wid p = ep
+            where _ :<|> ep = _postSignTransactions wid p
+
         _postExternalTransaction
             = client (Proxy @("v2" :> Proxy_))
     in
         TransactionClient
             { listTransactions = (`_listTransactions` Nothing)
             , postSignTransaction = _postSignTransaction
+            , postSignTransactionParts = _postSignTransactionParts
             , postTransaction = _postTransaction
             , postTransactionFee = _postTransactionFee
             , postExternalTransaction = _postExternalTransaction
@@ -304,7 +315,7 @@ byronTransactionClient
     :: TransactionClient
 byronTransactionClient =
     let
-        _postSignTransaction
+        _postSignTransactions
             :<|> _postTransaction
             :<|> _listTransactions
             :<|> _postTransactionFee
@@ -312,12 +323,18 @@ byronTransactionClient =
             :<|> _getTransaction
             = client (Proxy @("v2" :> (ByronTransactions Aeson.Value)))
 
+        _postSignTransaction wid p = ep
+            where ep :<|> _ = _postSignTransactions wid p
+        _postSignTransactionParts wid p = ep
+            where _ :<|> ep = _postSignTransactions wid p
+
         _postExternalTransaction
             = client (Proxy @("v2" :> Proxy_))
 
     in TransactionClient
         { listTransactions = _listTransactions
         , postSignTransaction = _postSignTransaction
+        , postSignTransactionParts = _postSignTransactionParts
         , postTransaction = _postTransaction
         , postTransactionFee = _postTransactionFee
         , postExternalTransaction = _postExternalTransaction

@@ -257,7 +257,14 @@ import Cardano.Wallet.Primitive.Types.Coin
 import Cardano.Wallet.Primitive.Types.Hash
     ( Hash (..) )
 import Cardano.Wallet.Primitive.Types.Tx
-    ( Direction (..), TxIn (..), TxMetadata, TxStatus (..), txMetadataIsNull )
+    ( Direction (..)
+    , SerialisedTx (..)
+    , SerialisedTxParts (..)
+    , TxIn (..)
+    , TxMetadata
+    , TxStatus (..)
+    , txMetadataIsNull
+    )
 import Cardano.Wallet.Primitive.Types.UTxO
     ( BoundType, HistogramBar (..), UTxOStatistics (..) )
 import Cardano.Wallet.TokenMetadata
@@ -780,7 +787,7 @@ data ByronWalletPutPassphraseData = ByronWalletPutPassphraseData
     } deriving (Eq, Generic, Show)
 
 data PostSignTransactionData = PostSignTransactionData
-    { tx :: !ApiSerialisedTransaction -- TODO: ADP-902 or tx
+    { transaction :: !ApiSerialisedTransaction
     , passphrase :: !(ApiT (Passphrase "lenient"))
     } deriving (Eq, Generic, Show)
 
@@ -799,9 +806,10 @@ data PostTransactionFeeOldData (n :: NetworkDiscriminant) = PostTransactionFeeOl
     , timeToLive :: !(Maybe (Quantity "second" NominalDiffTime))
     } deriving (Eq, Generic, Show)
 
-newtype ApiSerialisedTransaction = ApiSerialisedTransaction
-    { payload :: ByteString
-    } deriving (Eq, Generic, Show)
+data ApiSerialisedTransaction
+    = ApiSerialisedTransaction !(ApiT SerialisedTx)
+    | ApiSerialisedTransactionParts !(ApiT SerialisedTxParts)
+    deriving (Eq, Generic, Show)
 
 data ApiFee = ApiFee
     { estimatedMin :: !(Quantity "lovelace" Natural)
@@ -2079,9 +2087,29 @@ instance FromJSON (ApiT BoundType) where
     parseJSON = fmap ApiT . genericParseJSON defaultSumTypeOptions
 
 instance FromJSON ApiSerialisedTransaction where
-    parseJSON = fmap ApiSerialisedTransaction . fromBaseText Base16
+    parseJSON v = (ApiSerialisedTransaction <$> parseJSON v)
+        <|> (ApiSerialisedTransactionParts <$> parseJSON v)
+
 instance ToJSON ApiSerialisedTransaction where
-    toJSON = toBaseText Base16 . view #payload
+    toJSON (ApiSerialisedTransaction tx) = toJSON tx
+    toJSON (ApiSerialisedTransactionParts txParts) = toJSON txParts
+
+instance FromJSON (ApiT SerialisedTx) where
+    parseJSON = fmap (ApiT . SerialisedTx) . fromBaseText Base16
+instance ToJSON (ApiT SerialisedTx) where
+    toJSON = toBaseText Base16 . view #payload . getApiT
+
+instance FromJSON (ApiT SerialisedTxParts) where
+    parseJSON = withObject "SerialisedTxParts" $ \o -> ApiT <$>
+        (SerialisedTxParts
+            <$> (o .: "body" >>= fromBaseText Base16)
+            <*> (o .:? "witnesses" .!= [] >>= mapM (fromBaseText Base16)))
+
+instance ToJSON (ApiT SerialisedTxParts) where
+    toJSON (ApiT (SerialisedTxParts b ws)) = object
+        [ "body" .= toBaseText Base16 b
+        , "witnesses" .= map (toBaseText Base16) ws
+        ]
 
 instance FromJSON PostSignTransactionData where
     parseJSON = genericParseJSON defaultRecordTypeOptions
@@ -2508,11 +2536,14 @@ instance FromText (AddressAmount Text) where
             [l, r] -> AddressAmount r <$> fromText l <*> pure mempty
             _ -> err
 
-instance FromText ApiSerialisedTransaction where
-    fromText = bimap (const errMsg) ApiSerialisedTransaction
+instance FromText (ApiT SerialisedTx) where
+    fromText = bimap (const errMsg) (ApiT . SerialisedTx)
         . convertFromBase Base16 . T.encodeUtf8
       where
         errMsg = TextDecodingError "Parse error. Expecting hex-encoded format."
+
+-- instance FromText ApiSerialisedTransaction where
+--     fromText = fmap ApiSerialisedTransaction . fromText
 
 instance FromText AnyAddress where
     fromText txt = case detectEncoding (T.unpack txt) of
@@ -2554,11 +2585,11 @@ instance FromText a => FromHttpApiData (ApiT a) where
 instance ToText a => ToHttpApiData (ApiT a) where
     toUrlPiece = toText . getApiT
 
-instance MimeUnrender OctetStream ApiSerialisedTransaction where
-    mimeUnrender _ = pure . ApiSerialisedTransaction . BL.toStrict
+instance MimeUnrender OctetStream (ApiT SerialisedTx) where
+    mimeUnrender _ = pure . ApiT . SerialisedTx . BL.toStrict
 
-instance MimeRender OctetStream ApiSerialisedTransaction where
-   mimeRender _ (ApiSerialisedTransaction val) = BL.fromStrict val
+instance MimeRender OctetStream (ApiT SerialisedTx) where
+   mimeRender _ = BL.fromStrict . view #payload . getApiT
 
 instance FromHttpApiData ApiTxId where
     parseUrlPiece txt = case fromText txt of

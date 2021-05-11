@@ -1163,22 +1163,29 @@ instance Malformed (BodyParam PostSignTransactionData) where
          jsonInvalid = first BodyParam <$>
             [ ("1020344", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData failed")
             , ("\"hello\"", "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData failed, expected Object, but encountered String")
-            , ("{\"txBody: \"\", \"random\"}", msgJsonInvalid)
-            , ("{\"txBody: \"lah\", \"passphase\": \"Secure Passphrase\"}", "fixme")
-            , ("{\"txBody: 1020344, \"passphase\": \"Secure Passphrase\"}", "fixme")
+            , ("{\"tx\": \"\", \"random\"}", msgJsonInvalid)
+            , ("{\"tx\": \"lah\", \"passphase\": \"Secure Passphrase\"}", "fixme")
+            , ("{\"tx\": 1020344, \"passphase\": \"Secure Passphrase\"}", "fixme")
+            , ("{\"tx\": { \"body\", 1020344 }, \"passphase\": \"Secure Passphrase\"}", "fixme: expected String but encountered Number")
             ]
          jsonValid = first (BodyParam . Aeson.encode) <$> paymentCases ++
             [ -- passphrase
               ( [aesonQQ|
-                { "tx_body": "cafecafe"
+                { "tx": "cafecafe"
                 }|]
               , "Error in $: parsing Cardano.Wallet.Api.Types.PostSignTransactionData(PostSignTransactionData) failed, key 'passphrase' not found"
               )
             , ( [aesonQQ|
-               { "tx_body": "cafecafe",
+               { "tx": "cafecafe",
                   "passphrase": #{nameTooLong}
                }|]
                , "Error in $.passphrase: passphrase is too long: expected at most 255 characters"
+              )
+            , ( [aesonQQ|
+               { "tx": { "witnesses": [] },
+                  "passphrase": #{wPassphrase}
+               }|]
+               , "Error in $: key 'body' not found"
               )
             ]
 

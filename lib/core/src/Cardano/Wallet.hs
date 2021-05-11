@@ -111,8 +111,9 @@ module Cardano.Wallet
     , selectAssetsNoOutputs
     , assignChangeAddresses
     , selectionToUnsignedTx
-    , signTransaction
     , buildAndSignTransaction
+    , signTransaction
+    , joinSerialisedTxParts
     , ErrSelectAssets(..)
     , ErrSignPayment (..)
     , ErrNotASequentialWallet (..)
@@ -334,6 +335,7 @@ import Cardano.Wallet.Primitive.Types.Tx
     ( Direction (..)
     , LocalTxSubmissionStatus
     , SealedTx (..)
+    , SerialisedTxParts (..)
     , TransactionInfo (..)
     , Tx
     , TxChange (..)
@@ -1441,7 +1443,7 @@ signTransaction
        -- ^ Reward account derived from the root key (or somewhere else).
     -> Passphrase "raw"
     -> ByteString
-    -> ExceptT ErrSignPayment IO SealedTx
+    -> ExceptT ErrSignPayment IO SerialisedTxParts
 signTransaction ctx wid mkRwdAcct pwd txBody = db & \DBLayer{..} -> do
     era <- liftIO $ currentNodeEra nl
     let _decoded = decodeSignedTx tl era txBody
@@ -1456,12 +1458,28 @@ signTransaction ctx wid mkRwdAcct pwd txBody = db & \DBLayer{..} -> do
             let _rewardAcnt = mkRwdAcct (xprv, pwdP)
             -- withExceptT ErrSignPaymentMkTx $ ExceptT $ pure $
             --     witnessTransaction tl rewardAcnt keyFrom txBody
-            pure $ SealedTx txBody
+            pure $ SerialisedTxParts txBody []
 
   where
     db = ctx ^. dbLayer @IO @s @k
     tl = ctx ^. transactionLayer @k
     nl = ctx ^. networkLayer
+
+joinSerialisedTxParts
+    :: forall ctx k.
+        ( HasTransactionLayer k ctx
+        , HasNetworkLayer IO ctx
+        )
+    => ctx
+    -> SerialisedTxParts
+    -> IO ByteString
+joinSerialisedTxParts ctx (SerialisedTxParts txBody _wits) = do
+    _era <- currentNodeEra nl
+    -- TODO: ADP-919 encode full tx
+    pure txBody
+  where
+    nl = ctx ^. networkLayer
+    _tl = ctx ^. transactionLayer @k
 
 -- | Produce witnesses and construct a transaction from a given
 -- selection. Requires the encryption passphrase in order to decrypt

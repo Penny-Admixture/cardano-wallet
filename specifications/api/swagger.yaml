@@ -1900,7 +1900,7 @@ components:
         - <<: *serializedHex
           title: Serialized transaction body
 
-    x-txWits: &txWits
+    x-txWits: &txWitnesses
       type: array
       items: *serializedHex
       title: Serialized transaction witnesses
@@ -1917,10 +1917,9 @@ components:
           title: Serialized body and witnesses
           required:
             - body
-            - wits
           properties:
             body: *txBody
-            wits: *txWits
+            witnesses: *txWitnesses
 
     ApiWalletDelegationNext: &ApiWalletDelegationNext
       type: object
@@ -2472,12 +2471,12 @@ components:
       type: object
       required:
         - passphrase
-        - tx
+        - transaction
       properties:
         passphrase:
           <<: *lenientPassphrase
           description: The wallet's master passphrase.
-        tx: *ApiSerialisedTransaction
+        transaction: *ApiSerialisedTransaction
 
     # ADP-908 Deprecated
     ApiPostTransactionDataByron: &ApiPostTransactionDataByron
