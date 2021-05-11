@@ -1696,11 +1696,7 @@ listAddresses ctx normalize (ApiT wid) stateFilter = do
 postSignTransaction
     :: forall ctx s k (n :: NetworkDiscriminant).
         ( ctx ~ ApiLayer s k
-        , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
-        , HardDerivation k
         , IsOwned s k
-        , Typeable n
-        , Typeable s
         , WalletKey k
         )
     => ctx
@@ -1714,11 +1710,7 @@ postSignTransaction ctx wid body = fmap (ApiT . SerialisedTx) $
 postSignTransactionParts
     :: forall ctx s k (n :: NetworkDiscriminant).
         ( ctx ~ ApiLayer s k
-        , Bounded (Index (AddressIndexDerivationType k) 'AddressK)
-        , HardDerivation k
         , IsOwned s k
-        , Typeable n
-        , Typeable s
         , WalletKey k
         )
     => ctx
