@@ -86,12 +86,14 @@ import Cardano.Wallet.Primitive.Types.Hash
 import Cardano.Wallet.Primitive.Types.TokenMap
     ( AssetId (..) )
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( AssetLogo (..)
+    ( AssetDecimals (..)
+    , AssetLogo (..)
     , AssetMetadata (..)
     , AssetURL (..)
     , AssetUnit (..)
     , TokenName (..)
     , TokenPolicyId (..)
+    , validateMetadataDecimals
     , validateMetadataDescription
     , validateMetadataLogo
     , validateMetadataName
@@ -113,6 +115,7 @@ import Data.Aeson
     , eitherDecodeStrict'
     , encode
     , withObject
+    , withScientific
     , withText
     , (.!=)
     , (.:)
@@ -138,6 +141,8 @@ import Data.Maybe
     ( catMaybes, mapMaybe )
 import Data.Proxy
     ( Proxy (..) )
+import Data.Scientific
+    ( toBoundedInteger )
 import Data.String
     ( IsString (..) )
 import Data.Text
@@ -146,6 +151,8 @@ import Data.Text.Class
     ( ToText (..) )
 import Data.Time.Clock
     ( DiffTime )
+import Data.Word
+    ( Word64 )
 import GHC.Generics
     ( Generic )
 import GHC.TypeLits
@@ -231,6 +238,7 @@ data SubjectProperties = SubjectProperties
         , Maybe (Property "url")
         , Maybe (Property "logo")
         , Maybe (Property "unit")
+        , Maybe (Property "decimals")
         )
     } deriving (Generic, Show, Eq)
 
@@ -268,6 +276,7 @@ type instance PropertyValue "ticker" = Text
 type instance PropertyValue "url" = AssetURL
 type instance PropertyValue "unit" = AssetUnit
 type instance PropertyValue "logo" = AssetLogo
+type instance PropertyValue "decimals" = AssetDecimals
 
 class HasValidator (name :: Symbol) where
     -- TODO: requires AllowAmbiguousTypes extension
@@ -286,6 +295,8 @@ instance HasValidator "logo" where
     validatePropertyValue = validateMetadataLogo
 instance HasValidator "unit" where
     validatePropertyValue = validateMetadataUnit
+instance HasValidator "decimals" where
+    validatePropertyValue = validateMetadataDecimals
 
 -- | Will be used in future for checking integrity and authenticity of metadata.
 data Signature = Signature
@@ -503,8 +514,9 @@ metadataFromProperties (SubjectProperties _ _ properties) =
         <*> pure (getValue url)
         <*> pure (getValue logo)
         <*> pure (getValue unit)
+        <*> pure (getValue decimals)
   where
-    ( name, description, ticker, url, logo, unit ) = properties
+    ( name, description, ticker, url, logo, unit, decimals ) = properties
     getValue :: Maybe (Property a) -> Maybe (PropertyValue a)
     getValue = (>>= (either (const Nothing) Just . value))
 
@@ -536,13 +548,14 @@ instance FromJSON SubjectProperties where
         <*> o .:? "owner"
         <*> parseProperties o
       where
-        parseProperties o = (,,,,,)
+        parseProperties o = (,,,,,,)
             <$> prop @"name" o
             <*> prop @"description" o
             <*> prop @"ticker" o
             <*> prop @"url" o
             <*> prop @"logo" o
             <*> prop @"unit" o
+            <*> prop @"decimals" o
 
         prop
             :: forall name. (KnownSymbol name, FromJSON (Property name))
@@ -586,6 +599,12 @@ instance FromJSON AssetUnit where
     parseJSON = withObject "AssetUnit" $ \o -> AssetUnit
         <$> o .: "name"
         <*> o .: "decimals"
+
+instance FromJSON AssetDecimals where
+    parseJSON = withScientific "AssetDecimals" $ \sci ->
+      case toBoundedInteger sci of
+        Nothing            -> fail "AssetDecimals must be an integer"
+        Just (n :: Word64) -> applyValidator validateMetadataDecimals (AssetDecimals $ fromIntegral n)
 
 --
 -- Helpers

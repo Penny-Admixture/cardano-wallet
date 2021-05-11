@@ -36,7 +36,8 @@ import Cardano.Wallet.Primitive.Types.Hash
 import Cardano.Wallet.Primitive.Types.TokenMap
     ( AssetId (..) )
 import Cardano.Wallet.Primitive.Types.TokenPolicy
-    ( AssetLogo (..)
+    ( AssetDecimals (..)
+    , AssetLogo (..)
     , AssetURL (..)
     , AssetUnit (..)
     , TokenName (..)
@@ -171,9 +172,9 @@ queryServerStatic golden = do
         -> [SubjectProperties]
     filterResponse subs props = map filterProps . filter inSubs
       where
-        filterProps (SubjectProperties subject owner (a, b, c, d, e, f)) =
+        filterProps (SubjectProperties subject owner (a, b, c, d, e, f, g)) =
             SubjectProperties subject owner
-            (inProps a, inProps b, inProps c, inProps d, inProps e, inProps f)
+            (inProps a, inProps b, inProps c, inProps d, inProps e, inProps f, inProps g)
 
         inSubs sp = (view #subject sp) `Set.member` subs
 
@@ -202,7 +203,7 @@ assetIdFromSubject =
 instance FromJSON BatchRequest where
 
 instance ToJSON SubjectProperties where
-   toJSON (SubjectProperties s o (n,d,a,u,l,t)) = object $
+   toJSON (SubjectProperties s o (n,d,a,u,l,t,dec)) = object $
        [ "subject" .= s
        , "owner" .= o
        ] ++ optionals
@@ -212,6 +213,7 @@ instance ToJSON SubjectProperties where
        , "url" .= u
        , "logo" .= l
        , "unit" .= t
+       , "decimals" .= dec
        ]
      where
        optionals = filter ((/= Null) . snd)
@@ -247,3 +249,6 @@ instance ToJSON AssetUnit where
 
 instance ToJSON AssetURL where
     toJSON = toJSON . show . unAssetURL
+
+instance ToJSON AssetDecimals where
+  toJSON = toJSON . show . unAssetDecimals

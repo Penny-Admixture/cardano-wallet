@@ -28,6 +28,8 @@ module Cardano.Wallet.Primitive.Types.TokenPolicy
     , AssetURL (..)
     , AssetLogo (..)
     , AssetUnit (..)
+    , AssetDecimals (..)
+    , validateMetadataDecimals
     , validateMetadataName
     , validateMetadataTicker
     , validateMetadataDescription
@@ -207,6 +209,7 @@ data AssetMetadata = AssetMetadata
     , url :: Maybe AssetURL
     , logo :: Maybe AssetLogo
     , unit :: Maybe AssetUnit
+    , decimals :: Maybe AssetDecimals
     } deriving stock (Eq, Ord, Generic)
     deriving (Show) via (Quiet AssetMetadata)
 
@@ -242,6 +245,21 @@ instance ToText AssetURL where
 
 instance FromText AssetURL where
     fromText = first TextDecodingError . validateMetadataURL
+
+newtype AssetDecimals = AssetDecimals
+  { unAssetDecimals :: Int
+  } deriving (Eq, Ord, Generic)
+  deriving (Show) via (Quiet AssetDecimals)
+
+instance NFData AssetDecimals
+
+instance ToText AssetDecimals where
+  toText = T.pack . show . unAssetDecimals
+
+instance FromText AssetDecimals where
+  fromText t = do
+    unvalidated <- AssetDecimals <$> fromText t
+    first TextDecodingError $ validateMetadataDecimals unvalidated
 
 validateMinLength :: Int -> Text -> Either String Text
 validateMinLength n text
@@ -294,3 +312,8 @@ validateMetadataLogo logo
   where
     len = BS.length $ unAssetLogo logo
     maxLen = 65536
+
+validateMetadataDecimals :: AssetDecimals -> Either String AssetDecimals
+validateMetadataDecimals (AssetDecimals n)
+  | n >= 0 && n <= 255 = Right $ AssetDecimals n
+  | otherwise          = Left "Decimal value must be between [0, 255] inclusive."
