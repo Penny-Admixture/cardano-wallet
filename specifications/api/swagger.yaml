@@ -1906,10 +1906,15 @@ components:
       title: Serialized transaction witnesses
 
     ApiSerialisedTransaction: &ApiSerialisedTransaction
+      description: |
+        An transaction can be posted fully encoded, or separated into
+        a body and witness set, each of these being individually
+        encoded.
       oneOf:
         - <<: *serializedHex
           title: Serialized transaction
         - type: object
+          title: Serialized body and witnesses
           required:
             - body
             - wits
@@ -2467,12 +2472,12 @@ components:
       type: object
       required:
         - passphrase
-        - tx_body
+        - tx
       properties:
         passphrase:
           <<: *lenientPassphrase
           description: The wallet's master passphrase.
-        tx_body: *txBody
+        tx: *ApiSerialisedTransaction
 
     # ADP-908 Deprecated
     ApiPostTransactionDataByron: &ApiPostTransactionDataByron
@@ -3839,13 +3844,7 @@ x-responsesGetTransaction: &responsesGetTransaction
 
 # ADP-908 Deprecated
 x-responsesPostTransaction: &responsesPostTransaction
-  400:
-    description: Bad Request
-    content:
-      application/json:
-        schema:
-          oneOf:
-            - <<: *errBadRequest
+  <<: *responsesErr400
   403:
     description: Forbidden
     content:
@@ -3869,14 +3868,8 @@ x-responsesPostTransaction: &responsesPostTransaction
       application/json:
         schema: *ApiTransaction
 
-x-responsesPostSignTransaction: &responsesPostSignedTransaction
-  400:
-    description: Bad Request
-    content:
-      application/json:
-        schema:
-          oneOf:
-            - <<: *errBadRequest
+x-responsesPostSignTransaction: &responsesPostSignTransaction
+  <<: *responsesErr400
   403:
     description: Forbidden
     content:
@@ -3895,6 +3888,17 @@ x-responsesPostSignTransaction: &responsesPostSignedTransaction
         schema: *ApiSerialisedTransaction
       application/octet-stream:
         schema: *signedTransactionBlob
+
+x-responsesPostSignedTransaction: &responsesPostSignedTransaction
+  <<: *responsesErr400
+  <<: *responsesErr404WalletNotFound
+  <<: *responsesErr406
+  <<: *responsesErr415UnsupportedMediaType
+  202:
+    description: Accepted
+    content:
+      application/json:
+        schema: *ApiTxId
 
 x-responsesPostExternalTransaction: &responsesPostExternalTransaction
   <<: *responsesErr400
@@ -4428,7 +4432,7 @@ paths:
         content:
           application/json:
             schema: *ApiPostSignTransactionData
-      responses: *responsesPostSignedTransaction
+      responses: *responsesPostSignTransaction
 
   /wallets/{walletId}/transactions:
     post:
@@ -5021,7 +5025,7 @@ paths:
         content:
           application/json:
             schema: *ApiPostSignTransactionData
-      responses: *responsesPostSignedTransaction
+      responses: *responsesPostSignTransaction
 
   /byron-wallets/{walletId}/transactions:
     post:

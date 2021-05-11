@@ -780,7 +780,7 @@ data ByronWalletPutPassphraseData = ByronWalletPutPassphraseData
     } deriving (Eq, Generic, Show)
 
 data PostSignTransactionData = PostSignTransactionData
-    { txBody :: !ApiSerialisedTransaction -- TODO: ADP-902 or tx
+    { tx :: !ApiSerialisedTransaction -- TODO: ADP-902 or tx
     , passphrase :: !(ApiT (Passphrase "lenient"))
     } deriving (Eq, Generic, Show)
 

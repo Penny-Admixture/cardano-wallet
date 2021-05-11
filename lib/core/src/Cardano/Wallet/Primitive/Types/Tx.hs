@@ -398,8 +398,8 @@ instance Buildable a => Buildable (WithDirection a) where
         <> (case d of; Incoming -> "+"; Outgoing -> "-")
         <> build a
 
--- | @SealedTx@ is a serialised transaction that is ready to be submitted
--- to the node.
+-- | @SealedTx@ is a signed and serialised transaction that is ready to be
+-- submitted to the node.
 newtype SealedTx = SealedTx { getSealedTx :: ByteString }
     deriving stock (Show, Eq, Generic)
     deriving newtype (ByteArrayAccess, NFData)
