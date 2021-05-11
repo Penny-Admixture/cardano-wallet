@@ -1435,7 +1435,7 @@ accPubKeyArgument = argumentT $ mempty
 transactionSubmitPayloadArgument :: Parser (ApiT SerialisedTx)
 transactionSubmitPayloadArgument = argumentT $ mempty
     <> metavar "BINARY_BLOB"
-    <> help "hex-encoded binary blob of externally-signed transaction."
+    <> help "base64-encoded binary blob of externally-signed transaction."
 
 -- | [--metadata=JSON]
 --

@@ -1655,9 +1655,9 @@ instance EncodeStakeAddress n => ToJSON (ApiCoinSelectionWithdrawal n) where
     toJSON = genericToJSON defaultRecordTypeOptions
 
 instance FromJSON ApiRawMetadata where
-    parseJSON = fmap ApiRawMetadata . fromBaseText Base64
+    parseJSON = fmap ApiRawMetadata . parseBase64Text
 instance ToJSON ApiRawMetadata where
-    toJSON = toBaseText Base64 . unApiRawMetadata
+    toJSON = toJSONBase64 . unApiRawMetadata
 
 instance {-# OVERLAPS #-} DecodeAddress n => FromJSON (ApiT Address, Proxy n)
   where
@@ -2095,20 +2095,20 @@ instance ToJSON ApiSerialisedTransaction where
     toJSON (ApiSerialisedTransactionParts txParts) = toJSON txParts
 
 instance FromJSON (ApiT SerialisedTx) where
-    parseJSON = fmap (ApiT . SerialisedTx) . fromBaseText Base16
+    parseJSON = fmap (ApiT . SerialisedTx) . parseBase64Text
 instance ToJSON (ApiT SerialisedTx) where
-    toJSON = toBaseText Base16 . view #payload . getApiT
+    toJSON = toJSONBase64 . view #payload . getApiT
 
 instance FromJSON (ApiT SerialisedTxParts) where
     parseJSON = withObject "SerialisedTxParts" $ \o -> ApiT <$>
         (SerialisedTxParts
-            <$> (o .: "body" >>= fromBaseText Base16)
-            <*> (o .:? "witnesses" .!= [] >>= mapM (fromBaseText Base16)))
+            <$> (o .: "body" >>= parseBase64Text)
+            <*> (o .:? "witnesses" .!= [] >>= mapM (parseBase64Text)))
 
 instance ToJSON (ApiT SerialisedTxParts) where
     toJSON (ApiT (SerialisedTxParts b ws)) = object
-        [ "body" .= toBaseText Base16 b
-        , "witnesses" .= map (toBaseText Base16) ws
+        [ "body" .= toJSONBase64 b
+        , "witnesses" .= map toJSONBase64 ws
         ]
 
 instance FromJSON PostSignTransactionData where
@@ -2671,12 +2671,14 @@ toTextJSON = toJSON . toText . getApiT
 fromTextJSON :: FromText a => String -> Value -> Aeson.Parser (ApiT a)
 fromTextJSON n = withText n (eitherToParser . bimap ShowFmt ApiT . fromText)
 
-fromBaseText :: Base -> Value -> Aeson.Parser ByteString
-fromBaseText base = withText (show base ++ " ByteString") $
-    eitherToParser . convertFromBase base . T.encodeUtf8
+parseBase64Text :: Value -> Aeson.Parser ByteString
+parseBase64Text = parse Base64
+  where
+    parse base = withText (show base ++ " ByteString") $
+        eitherToParser . convertFromBase base . T.encodeUtf8
 
-toBaseText :: Base -> ByteString -> Value
-toBaseText base = String . T.decodeLatin1 . convertToBase base
+toJSONBase64 :: ByteString -> Value
+toJSONBase64 = String . T.decodeLatin1 . convertToBase Base64
 
 {-------------------------------------------------------------------------------
                           User-Facing Address Encoding
