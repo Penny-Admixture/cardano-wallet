@@ -281,7 +281,7 @@ mkTx
     -> Coin
     -- ^ Explicit fee amount
     -> Maybe (NE.NonEmpty (Address, TokenMap))
-    -> Maybe (k 'AddressK XPrv, Passphrase "encryption")
+    -> Maybe (k 'ScriptK XPrv, Passphrase "encryption")
     -> ShelleyBasedEra era
     -> Either ErrMkTx (Tx, SealedTx)
 mkTx networkId payload ttl (rewardAcnt, pwdAcnt) keyFrom wdrl cs fees mForgeOuts extraWit era = do

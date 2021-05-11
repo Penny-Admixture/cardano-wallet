@@ -44,11 +44,10 @@ import Cardano.Address.Script
     , toScriptHash
     )
 import Cardano.Address.Style.Shared
-    ( deriveAddressPublicKey, deriveDelegationPublicKey, hashKey )
+    ( deriveAddressPublicKey, deriveDelegationPublicKey, hashKey, liftXPub )
 import Cardano.Address.Style.Shelley
     ( Credential (..)
     , delegationAddress
-    , liftXPub
     , mkNetworkDiscriminant
     , paymentAddress
     )
@@ -116,8 +115,8 @@ keyHashFromAccXPubIx
     -> Role
     -> Index 'Soft 'ScriptK
     -> KeyHash
-keyHashFromAccXPubIx accXPub r =
-    hashVerificationKey r . deriveVerificationKey accXPub
+keyHashFromAccXPubIx accXPub r ix =
+    hashVerificationKey r $ deriveVerificationKey accXPub r ix
 
 replaceCosignersWithVerKeys
     :: CA.Role
@@ -153,6 +152,7 @@ replaceCosignersWithVerKeys role' (ScriptTemplate xpubs scriptTemplate) ix =
         CA.UTxOExternal -> deriveAddressPublicKey
         CA.Stake -> deriveDelegationPublicKey
         _ ->  error "replaceCosignersWithVerKeys is supported only for role=0 and role=2"
+
 toNetworkTag
     :: forall (n :: NetworkDiscriminant). Typeable n => CA.NetworkTag
 toNetworkTag =

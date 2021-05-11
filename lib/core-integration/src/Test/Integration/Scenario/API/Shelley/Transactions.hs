@@ -1021,6 +1021,7 @@ spec = describe "SHELLEY_TRANSACTIONS" $ do
       addrs <- listAddresses @n ctx w
       let destination = (addrs !! 1) ^. #id
       let payload = Json [json|{
+                              "address": #{destination},
                               "mint_amount": {
                                   "quantity": 5,
                                   "unit": "assets"

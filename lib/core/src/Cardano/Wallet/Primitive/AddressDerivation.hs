@@ -154,6 +154,7 @@ import GHC.TypeLits
 import Safe
     ( readMay, toEnumMay )
 
+import qualified Cardano.Address.Script as CA
 import qualified Codec.CBOR.Encoding as CBOR
 import qualified Codec.CBOR.Write as CBOR
 import qualified Crypto.Scrypt as Scrypt
@@ -500,18 +501,24 @@ deriveRewardAccount pwd rootPrv =
 deriveVerificationKey
     :: (SoftDerivation k, WalletKey k)
     => k 'AccountK XPub
+    -> Role
     -> Index 'Soft 'ScriptK
     -> k 'ScriptK XPub
-deriveVerificationKey accXPub =
-    liftRawKey . getRawKey . deriveAddressPublicKey accXPub MultisigScript . coerce
+deriveVerificationKey accXPub role' =
+    liftRawKey . getRawKey . deriveAddressPublicKey accXPub role' . coerce
 
 hashVerificationKey
     :: WalletKey k
-    => KeyRole
+    => Role
     -> k 'ScriptK XPub
     -> KeyHash
-hashVerificationKey r =
-    KeyHash r . blake2b224 . xpubPublicKey . getRawKey
+hashVerificationKey role' =
+    KeyHash keyRole . blake2b224 . xpubPublicKey . getRawKey
+  where
+    keyRole = case role' of
+        UtxoExternal -> CA.Payment
+        MutableAccount -> CA.Delegation
+        _ -> error "verification keys make sense only for payment (role=0) and delegation (role=2)"
 
 {-------------------------------------------------------------------------------
                                  Passphrases

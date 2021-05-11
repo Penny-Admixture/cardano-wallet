@@ -2775,7 +2775,7 @@ instance ToJSON (ApiT SmashServer) where
 -------------------------------------------------------------------------------}
 
 data ForgeTokenData (n :: NetworkDiscriminant) = ForgeTokenData
-    { address :: !(ApiT W.Address)
+    { address :: !(ApiT Address, Proxy n)
     , assetName :: !(ApiT W.TokenName)
     , mintAmount :: !(Quantity "assets" Natural)
     , monetaryPolicyIndex :: !(Maybe (ApiT DerivationIndex))
@@ -2786,5 +2786,6 @@ data ForgeTokenData (n :: NetworkDiscriminant) = ForgeTokenData
 
 instance DecodeAddress n => FromJSON (ForgeTokenData n) where
     parseJSON = genericParseJSON defaultRecordTypeOptions
+
 instance EncodeAddress n => ToJSON (ForgeTokenData n) where
     toJSON = genericToJSON defaultRecordTypeOptions

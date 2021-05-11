@@ -113,7 +113,8 @@ import Prelude
 import Cardano.Address.Derivation
     ( XPrv, XPub, xpubPublicKey, xpubToBytes )
 import Cardano.Address.Script
-    ( Cosigner (..), KeyHash, KeyRole (..), Script (RequireSignatureOf) )
+    ( Cosigner (..), KeyHash, KeyRole, Script (RequireSignatureOf) )
+import qualified Cardano.Address.Script as CA
 import Cardano.Api
     ( AnyCardanoEra (..)
     , AssetName (AssetName)
@@ -3361,7 +3362,7 @@ forgeToken ctx genChange (ApiT wid) body = do
     let derivationIndex = fromMaybe (DerivationIndex 0) $ fmap getApiT $ body ^. #monetaryPolicyIndex
     let md = body ^? #metadata . traverse . #getApiT
     let mTTL = body ^? #timeToLive . traverse . #getQuantity
-    let addr = body ^? #address
+    let (ApiT addr, _) = body ^. #address
 
     (wdrl, mkRwdAcct) <-
         mkRewardAccountBuilder @_ @s @_ @n ctx wid Nothing
@@ -3384,7 +3385,7 @@ forgeToken ctx genChange (ApiT wid) body = do
           scriptXPub = publicKey $ fst policyKey
 
           vkeyHash :: KeyHash
-          vkeyHash = hashVerificationKey @k Payment $ liftRawKey $ getRawKey scriptXPub
+          vkeyHash = hashVerificationKey @k MultisigScript $ liftRawKey $ getRawKey scriptXPub
 
           script :: Script KeyHash
           script = RequireSignatureOf vkeyHash
@@ -3395,19 +3396,17 @@ forgeToken ctx genChange (ApiT wid) body = do
           assetId :: AssetId
           assetId = AssetId policyId assetName
 
-        liftIO $ putStrLn $ T.unpack $ toText vkeyHash
-
         -- Transfer the minted assets to the payment address
         -- associated with the monetary policy
         let assets = TokenMap.singleton assetId assetQty
-        let txout = [TxOut addr (TokenBundle.TokenBundle (Coin 0) assets)]
+        let txout = (TxOut addr (TokenBundle.TokenBundle (Coin 0) assets)) NE.:| []
         -- let outs = fmap (\(TxOut addr (TokenBundle.TokenBundle coin tokens)) -> TxOut addr (TokenBundle.TokenBundle coin mempty)) (pure txout)
 
         let txCtx = defaultTransactionCtx
                 { txWithdrawal = wdrl
                 , txMetadata = md
                 , txTimeToLive = ttl
-                , txMintBurnInfo = Just (pure (payAddrXPub, assets) :: NonEmpty (Address, TokenMap.TokenMap))
+                , txMintBurnInfo = Just (pure (addr, assets) :: NonEmpty (Address, TokenMap.TokenMap))
                 }
 
         w <- liftHandler $ W.readWalletUTxOIndex @_ @s @k wrk wid
@@ -3423,7 +3422,7 @@ forgeToken ctx genChange (ApiT wid) body = do
         --          ) (outputsCovered sel)
 
         (tx, txMeta, txTime, sealedTx) <- liftHandler
-            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel (Just addrXPrv)
+            $ W.signTransaction @_ @s @k wrk wid genChange mkRwdAcct pwd txCtx sel (Just policyKey)
         -- liftIO $ putStrLn $ "Finished SIGN"
         -- liftIO $ putStrLn $ show tx
         liftHandler

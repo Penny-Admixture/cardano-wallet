@@ -1460,7 +1460,7 @@ signTransaction
     -> Passphrase "raw"
     -> TransactionCtx
     -> SelectionResult TokenBundle
-    -> Maybe (k 'AddressK XPrv, Passphrase "encryption")
+    -> Maybe (k 'ScriptK XPrv, Passphrase "encryption")
     -> ExceptT ErrSignPayment IO (Tx, TxMeta, UTCTime, SealedTx)
 signTransaction ctx wid argChange mkRwdAcct pwd txCtx sel extraWit = db & \DBLayer{..} -> do
     era <- liftIO $ currentNodeEra nl
@@ -2151,6 +2151,7 @@ derivePrivateKey
         , HardDerivation k
         , AddressIndexDerivationType k ~ 'Soft
         , s ~ SeqState n k
+        , WalletKey k
         )
     => ctx
     -> WalletId
@@ -2171,7 +2172,7 @@ derivePrivateKey ctx wid pwd (role_, ix) = db & \DBLayer{..} -> do
             let DerivationPrefix (_, _, acctIx) = derivationPrefix (getState cp)
             let acctK = deriveAccountPrivateKey encPwd rootK acctIx
             let addrK = deriveAddressPrivateKey encPwd acctK role_ addrIx
-            pure (addrK, encPwd)
+            pure (liftRawKey . getRawKey $ addrK, encPwd)
   where
     db = ctx ^. dbLayer @IO @s @k
 
