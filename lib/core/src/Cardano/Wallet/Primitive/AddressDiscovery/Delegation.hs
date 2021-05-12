@@ -146,9 +146,22 @@ lastActiveKey
     -> Maybe RewardAccount
 lastActiveKey s = accountAtIx s <$> lastActiveIx s
 
-data PointerUTxO = PointerUTxO TxIn Coin
+data PointerUTxO = PointerUTxO { pTxIn :: TxIn, pCoin :: Coin }
     deriving (Generic, Eq, Show)
     deriving anyclass NFData
+
+-- | Returns the index corresponding to the payment key the @PointerUTxO@
+-- should be locked with.
+--
+-- Our current implementation we require the @PointerUTxO@ to be created in the
+-- @@[0] -> [0,1] transition@@, i.e. @@nextKeyIx 1 -> nextKeyIx 2@@.
+pointerIx
+    :: DelegationState k
+    -> Maybe (Index 'Soft 'AddressK)
+pointerIx s
+    | nextKeyIx s == minBound       = Nothing
+    | nextKeyIx s == succ minBound  = Nothing
+    | otherwise                     = Just $ nextKeyIx s
 
 --------------------------------------------------------------------------------
 -- Constructors
@@ -219,11 +232,11 @@ setPortfolioOf s mkAddress isReg n =
         txWithCerts cs = Just $ Tx
             { certs = cs
             , inputs = maybeToList (mkTxIn <$> pointer s)
-            , outputs =
-                [ TxOut
-                    (mkAddress $ keyAtIx s $ nextKeyIx s')
+            , outputs = maybeToList $
+                (\i -> TxOut
+                    (mkAddress $ keyAtIx s i)
                     (TB.fromCoin minUTxOVal)
-                ]
+                ) <$> pointerIx s'
             }
     in
         txWithCerts $ reRegKey0IfNeeded
@@ -270,24 +283,25 @@ applyTx
     -> Hash "Tx"
     -> DelegationState k
     -> DelegationState k
-applyTx (Tx cs _ins outs) h s0 =
+applyTx (Tx cs ins outs) h s0 =
     let
         s = foldl (flip applyCert) s0 cs
-        isOurOut i (TxOut addr _b) =
-            case (paymentKeyFingerprint @k $ keyAtIx s i, paymentKeyFingerprint addr) of
-            (Right fp, Right fp')
+        isOurOut (TxOut addr _b) =
+            case (paymentKeyFingerprint @k . keyAtIx s <$> pointerIx s, paymentKeyFingerprint addr) of
+            (Just (Right fp), Right fp')
                 | fp == fp' -> True
                 | otherwise -> False
             _ -> False
-        -- To workaround rollback + old wallets, we also look for the pointer at
-        -- 0 and 1, aside from nextKeyIx.
-        f o = any (`isOurOut` o) [ nextKeyIx s, minBound, succ minBound ]
-        pointerOuts = filter (f . snd) $ zip [0..] outs
-    in case pointerOuts of
-        [] -> s --error "panic: no pointer utxo on-chain" -- What should we do?
-        [(ix,TxOut _addr tb)]
+        pointerIns = filter (\(x,_) -> Just x == (pTxIn <$> pointer s)) ins
+        pointerOuts = filter (isOurOut . snd) $ zip [0..] outs
+    in case (pointerIns, pointerOuts) of
+        ([],[]) -> s
+        ([_],[]) -> s { pointer = Nothing }
+        (_, [(ix,TxOut _addr tb)])
             -> s { pointer = Just $ PointerUTxO (TxIn h ix) (TB.getCoin tb) }
-        (_x:_) -> error "todo"
+        (_i:_, []) -> error "applyTx: impossible: multiple inputs matching the pointer UTxO"
+        ([], _o:_) -> error "applyTx: impossible: multiple recognized outputs"
+        (_i:_, (_o:_)) -> error "applyTx: impossible: both multiple ins and outs "
             -- There shouldn't be more than one pointer, but theoretically
             -- possible. If a user sends funds to an address corresponding to
             -- the stake key (why would they do this though?), we could mistake
@@ -295,6 +309,8 @@ applyTx (Tx cs _ins outs) h s0 =
             --
             -- TODO: Is this actually bad though? Or is it good because it will
             -- then be sent back as change? Any other problems?
+            --
+            -- Multiple identical TxIns is theoretically /impossible/ though.
   where
     modifyIx
         :: (Index 'Soft 'AddressK -> Index 'Soft 'AddressK)

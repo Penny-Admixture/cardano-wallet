@@ -124,7 +124,8 @@ spec = do
 
     it "no rejected txs, normally" $ property $ \cmds -> do
         let env = applyCmds env0 cmds
-        rejectedTxs env === []
+        counterexample (pretty env) $
+            rejectedTxs env === []
 
     -- Lots of weird things can happen when we concider concurrent user-actions
     -- on multiple wallet versions and rollbacks.
