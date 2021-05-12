@@ -90,7 +90,6 @@ import Cardano.Wallet.Primitive.Types.TokenPolicy
     , AssetLogo (..)
     , AssetMetadata (..)
     , AssetURL (..)
-    , AssetUnit (..)
     , TokenName (..)
     , TokenPolicyId (..)
     , validateMetadataDecimals
@@ -99,7 +98,6 @@ import Cardano.Wallet.Primitive.Types.TokenPolicy
     , validateMetadataName
     , validateMetadataTicker
     , validateMetadataURL
-    , validateMetadataUnit
     )
 import Control.Applicative
     ( (<|>) )
@@ -237,7 +235,6 @@ data SubjectProperties = SubjectProperties
         , Maybe (Property "ticker")
         , Maybe (Property "url")
         , Maybe (Property "logo")
-        , Maybe (Property "unit")
         , Maybe (Property "decimals")
         )
     } deriving (Generic, Show, Eq)
@@ -274,7 +271,6 @@ type instance PropertyValue "name" = Text
 type instance PropertyValue "description" = Text
 type instance PropertyValue "ticker" = Text
 type instance PropertyValue "url" = AssetURL
-type instance PropertyValue "unit" = AssetUnit
 type instance PropertyValue "logo" = AssetLogo
 type instance PropertyValue "decimals" = AssetDecimals
 
@@ -293,8 +289,6 @@ instance HasValidator "url" where
     validatePropertyValue = Right
 instance HasValidator "logo" where
     validatePropertyValue = validateMetadataLogo
-instance HasValidator "unit" where
-    validatePropertyValue = validateMetadataUnit
 instance HasValidator "decimals" where
     validatePropertyValue = validateMetadataDecimals
 
@@ -513,10 +507,9 @@ metadataFromProperties (SubjectProperties _ _ properties) =
         <*> pure (getValue ticker)
         <*> pure (getValue url)
         <*> pure (getValue logo)
-        <*> pure (getValue unit)
         <*> pure (getValue decimals)
   where
-    ( name, description, ticker, url, logo, unit, decimals ) = properties
+    ( name, description, ticker, url, logo, decimals ) = properties
     getValue :: Maybe (Property a) -> Maybe (PropertyValue a)
     getValue = (>>= (either (const Nothing) Just . value))
 
@@ -548,13 +541,12 @@ instance FromJSON SubjectProperties where
         <*> o .:? "owner"
         <*> parseProperties o
       where
-        parseProperties o = (,,,,,,)
+        parseProperties o = (,,,,,)
             <$> prop @"name" o
             <*> prop @"description" o
             <*> prop @"ticker" o
             <*> prop @"url" o
             <*> prop @"logo" o
-            <*> prop @"unit" o
             <*> prop @"decimals" o
 
         prop
@@ -594,11 +586,6 @@ instance FromJSON AssetURL where
 
 instance FromJSON AssetLogo where
     parseJSON = fmap (AssetLogo . raw @'Base64) . parseJSON
-
-instance FromJSON AssetUnit where
-    parseJSON = withObject "AssetUnit" $ \o -> AssetUnit
-        <$> o .: "name"
-        <*> o .: "decimals"
 
 instance FromJSON AssetDecimals where
     parseJSON = withScientific "AssetDecimals" $ \sci ->

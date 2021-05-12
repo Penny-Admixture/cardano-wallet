@@ -27,14 +27,12 @@ module Cardano.Wallet.Primitive.Types.TokenPolicy
     , AssetMetadata (..)
     , AssetURL (..)
     , AssetLogo (..)
-    , AssetUnit (..)
     , AssetDecimals (..)
     , validateMetadataDecimals
     , validateMetadataName
     , validateMetadataTicker
     , validateMetadataDescription
     , validateMetadataURL
-    , validateMetadataUnit
     , validateMetadataLogo
     ) where
 
@@ -64,8 +62,6 @@ import Data.ByteString
     ( ByteString )
 import Data.Function
     ( (&) )
-import Data.Functor
-    ( ($>) )
 import Data.Hashable
     ( Hashable )
 import Data.Text
@@ -78,8 +74,6 @@ import GHC.Generics
     ( Generic )
 import Network.URI
     ( URI, parseAbsoluteURI, uriScheme )
-import Numeric.Natural
-    ( Natural )
 import Quiet
     ( Quiet (..) )
 
@@ -208,21 +202,11 @@ data AssetMetadata = AssetMetadata
     , ticker :: Maybe Text
     , url :: Maybe AssetURL
     , logo :: Maybe AssetLogo
-    , unit :: Maybe AssetUnit
     , decimals :: Maybe AssetDecimals
     } deriving stock (Eq, Ord, Generic)
     deriving (Show) via (Quiet AssetMetadata)
 
 instance NFData AssetMetadata
-
--- | Specification of a larger unit for an asset. For example, the "lovelace"
--- asset has the larger unit "ada" with 6 zeroes.
-data AssetUnit = AssetUnit
-    { name :: Text -- ^ Name of the larger asset.
-    , decimals :: Natural  -- ^ Number of zeroes to add to base unit.
-    } deriving (Generic, Show, Eq, Ord)
-
-instance NFData AssetUnit
 
 -- | Specify an asset logo as an image data payload
 newtype AssetLogo = AssetLogo
@@ -294,16 +278,6 @@ validateMetadataURL = fmap AssetURL .
       validateHttps u@(uriScheme -> scheme)
           | scheme == "https:" = Right u
           | otherwise = Left $ "Scheme must be https: but got " ++ scheme
-
-validateMetadataUnit :: AssetUnit -> Either String AssetUnit
-validateMetadataUnit = validateName >=> validateDecimals
-  where
-    validateName u@AssetUnit{name} =
-        (validateMinLength 1 name >>= validateMaxLength 30) $> u
-    validateDecimals u@AssetUnit{decimals}
-        | decimals > 0 && decimals < 20 = Right u
-        | otherwise =
-            Left "AssetUnit decimals must be greater than 0 and less than 20"
 
 validateMetadataLogo :: AssetLogo -> Either String AssetLogo
 validateMetadataLogo logo
