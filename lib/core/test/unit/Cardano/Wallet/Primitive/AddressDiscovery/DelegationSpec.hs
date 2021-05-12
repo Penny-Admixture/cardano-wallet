@@ -22,6 +22,8 @@ import Cardano.Wallet.Primitive.AddressDerivation
     , KeyFingerprint (..)
     , MkKeyFingerprint (..)
     , MkKeyFingerprint
+    , NetworkDiscriminant (..)
+    , PaymentAddress (..)
     , RewardAccount (..)
     , RewardAccount
     , SoftDerivation (..)
@@ -66,6 +68,7 @@ import Test.QuickCheck
 import Test.QuickCheck.Arbitrary.Generic
     ( genericArbitrary )
 
+import qualified Cardano.Wallet.Primitive.Types.TokenBundle as TB
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Map as Map
@@ -118,6 +121,11 @@ spec = do
             let usableKeys' = usableKeys . wallet . applyCmds env0
             usableKeys' cmds
                 === usableKeys' (filter (not . isAdversarial) cmds)
+
+    it "adversaries can't affect pointer ix" $ property $ \(NonNegative n) keys -> do
+        let env = applyCmds env0 [CmdSetPortfolioOf n]
+        let env' = applyCmds env (map CmdMimicPointerOutput keys)
+        pointer (wallet env') === pointer (wallet env)
 
     it "(apply (cmds <> CmdSetPortfolioOf 0) s0) === s0"
         $ property $ \cmds -> do
@@ -195,11 +203,15 @@ instance SoftDerivation StakeKey' where
     deriveAddressPublicKey _acc _role i = StakeKey' $ toEnum $ fromEnum i
 
 instance MkKeyFingerprint StakeKey' Address where
-    paymentKeyFingerprint (Address addr) = Right $ KeyFingerprint addr
+    paymentKeyFingerprint (Address addr) = Right $ KeyFingerprint $ B8.drop 4 addr
+
+instance PaymentAddress 'Mainnet StakeKey' where
+    liftPaymentAddress (KeyFingerprint fp) = Address fp
+    paymentAddress k = Address $ "addr" <> unRewardAccount (toRewardAccount k)
 
 instance MkKeyFingerprint StakeKey' (StakeKey' 'AddressK XPub) where
     paymentKeyFingerprint k =
-        Right $ KeyFingerprint $ "addr" <> unRewardAccount (toRewardAccount k)
+        Right $ KeyFingerprint $ unRewardAccount (toRewardAccount k)
 
 --
 -- Mock chain of delegation certificates
@@ -242,17 +254,21 @@ data Cmd
     | CmdAdversarialReg RewardAccount
       -- ^ Someone could pay 2 ada to (re-)register your stake key. Your wallet
       -- shouldn't be affected negatively from it.
+    | CmdMimicPointerOutput RewardAccount
+      -- ^ Someone could send funds to the same UTxO
     deriving (Generic, Eq)
 
 isAdversarial :: Cmd -> Bool
 isAdversarial (CmdSetPortfolioOf _) = False
 isAdversarial (CmdAdversarialReg _) = True
 isAdversarial CmdOldWalletToggleFirstKey = False
+isAdversarial (CmdMimicPointerOutput _) = True -- Kind of
 
 instance Show Cmd where
     show (CmdSetPortfolioOf n) = "CmdSetPortfolioOf " <> show n
     show (CmdAdversarialReg (RewardAccount a)) = "CmdAdversarialReg " <> B8.unpack a
     show CmdOldWalletToggleFirstKey = "CmdOldWalletToggleFirstKey"
+    show (CmdMimicPointerOutput (RewardAccount a)) = "CmdMimicPointerOutput " <> B8.unpack a
 
 instance Buildable Tx where
     build (Tx cs [] []) = "Tx " <> listF cs
@@ -303,6 +319,7 @@ instance Arbitrary Cmd where
         [ (85, CmdSetPortfolioOf . getNonNegative <$> arbitrary)
         , (5, CmdAdversarialReg <$> arbitrary)
         , (10, pure CmdOldWalletToggleFirstKey)
+        , (10, CmdMimicPointerOutput <$> arbitrary)
         ]
     shrink = genericShrink
 
@@ -338,6 +355,13 @@ stepCmd CmdOldWalletToggleFirstKey env =
                 key0 = toRewardAccount (keyAtIx (wallet env) minBound)
                 isReg =  key0 `Set.member` (regs (ledger env))
                 tx = Tx [if isReg then DeRegisterKey key0 else RegisterKey key0] [] []
+            in tryApplyTx tx env
+stepCmd (CmdMimicPointerOutput (RewardAccount acc)) env =
+            let
+                addr = liftPaymentAddress @'Mainnet @StakeKey' $ KeyFingerprint acc
+                c = Coin 1
+                out = TxOut addr (TB.fromCoin c)
+                tx = Tx [] [] [out]
             in tryApplyTx tx env
 
 tryApplyTx :: Tx -> Env -> Env
