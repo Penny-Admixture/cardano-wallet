@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -219,6 +220,13 @@ unsafeDeserializeDelegationState = DelegationState
 --------------------------------------------------------------------------------
 
 -- | A transaction type specific to `DelegationState`.
+--
+-- Intented to be converted both from and to a more real transaction type.
+--
+-- When constructing a real transaction from `Tx`, these `outputs`
+-- should appear before other outputs. In the theoretical event that there's
+-- also a user-specified output with the same payment key as the pointer output,
+-- `applyTx` will track the first one as the new pointer.
 data Tx = Tx
     { certs :: [Cert]
     , inputs :: [(TxIn, Coin)]
@@ -287,7 +295,6 @@ setPortfolioOf s minUTxOVal mkAddress isReg n =
         else [RegisterKey (acct ix),  Delegate (acct ix)]
         )
 
-
     repairKey0 = reRegKey0IfNeeded ++ deRegKey0IfNeeded
       where
         reRegKey0IfNeeded =
@@ -314,8 +321,12 @@ setPortfolioOf s minUTxOVal mkAddress isReg n =
 
 -- | Apply a `Tx` to a `DelegationState`.
 --
--- NOTE: May accept invalid sequences of `Tx`s from alternative implementations
--- than `setPortfolioOf`.
+-- We do it in two steps:
+-- 1. Apply certificates
+-- 2. Look for new UTxO pointer based on the new state.
+--
+-- Because of this (and possibly more reasons), we may accept invalid sequences
+-- of `Tx`s from alternative implementations than `setPortfolioOf`.
 applyTx
     :: forall k. ( SoftDerivation k
         , ToRewardAccount k
@@ -325,11 +336,29 @@ applyTx
     -> Hash "Tx"
     -> DelegationState k
     -> DelegationState k
-applyTx (Tx cs ins outs) h s0 =
-    let
-        s = foldl (flip applyCert) s0 cs
-        -- NOTE: if s == s0 the pointer shouldn't change, and we could skip the
-        -- ins and outs checks for performance.
+applyTx (Tx cs ins outs) h s0 = updatePointer $ foldl (flip applyCert) (HasChanged s0 False) cs
+  where
+    -- | Removes the pointer if it was spent, and looks for the creation of a
+    -- new pointer output using the `pointerIx` (essensially `nextKeyIx`)
+    -- payment key.
+    updatePointer
+        :: HasChanged (DelegationState k)
+        -> DelegationState k
+    updatePointer (HasChanged s False) = s
+    updatePointer (HasChanged s True) = case (pointerIns, pointerOuts) of
+        ([],[]) -> s
+        ([_],[]) -> s { pointer = Nothing }
+        (_, (ix,TxOut _addr tb) : _rest)
+            -- Outputs with the same payment key as the pointer could in theory
+            -- exist, if they manually send funds to it, and their wallet
+            -- software allows them to do it while also re-delegating.
+            --
+            -- TODO: If the pointer UTxO contains tokens, we might want to crash.
+            -- TODO: We might also want to trace a warning if _rest /= []
+            -> s { pointer = Just $ PointerUTxO (TxIn h ix) (TB.getCoin tb) }
+        (_:_, []) -> error "applyTx: looks as if the same input was spent twice\
+                        \, which is completely impossible."
+      where
         isOurOut (TxOut addr _b) =
             case (paymentKeyFingerprint @k . keyAtIx s <$> pointerIx s, paymentKeyFingerprint addr) of
             (Just (Right fp), Right fp')
@@ -338,32 +367,21 @@ applyTx (Tx cs ins outs) h s0 =
             _ -> False
         pointerIns = filter (\(x,_) -> Just x == (pTxIn <$> pointer s)) ins
         pointerOuts = filter (isOurOut . snd) $ zip [0..] outs
-    in case (pointerIns, pointerOuts) of
-        ([],[]) -> s
-        ([_],[]) -> s { pointer = Nothing }
-        (_, [(ix,TxOut _addr tb)])
-            -- TODO: If we pointer UTxO contains tokens, we might want to crash.
-            -> s { pointer = Just $ PointerUTxO (TxIn h ix) (TB.getCoin tb) }
-        (_i:_, []) -> error "applyTx: impossible: multiple inputs matching the pointer UTxO"
-        ([], _o:_) -> error "applyTx: impossible: multiple recognized outputs"
-        (_i:_, (_o:_)) -> error "applyTx: impossible: both multiple ins and outs "
-            -- There shouldn't be more than one pointer, but theoretically
-            -- possible. If a user sends funds to an address corresponding to
-            -- the stake key (why would they do this though?), we could mistake
-            -- it for the pointer.
-            --
-            -- TODO: Is this actually bad though? Or is it good because it will
-            -- then be sent back as change? Any other problems?
-            --
-            -- Multiple identical TxIns is theoretically /impossible/ though.
-  where
+
+
     modifyIx
         :: (Index 'Soft 'AddressK -> Index 'Soft 'AddressK)
-        -> DelegationState k
-        -> DelegationState k
-    modifyIx f s = s { nextKeyIx = f (nextKeyIx s) }
+        -> HasChanged (DelegationState k)
+        -> HasChanged (DelegationState k)
+    modifyIx f (HasChanged s changed) =
+        let
+            ix = nextKeyIx s
+            ix' = f ix
+            changed' = ix' /= ix
+        in
+        HasChanged (s { nextKeyIx = ix' }) (changed || changed')
 
-    applyCert c s = modifyKey0 $ flip modifyIx s $ case c of
+    applyCert c hc@(HasChanged s _) = fmap modifyKey0 $ flip modifyIx hc $ case c of
         RegisterKey _ -> id
         Delegate k
             | k == nextKey s            -> succ
@@ -388,6 +406,11 @@ applyTx (Tx cs ins outs) h s0 =
         nextKey s' = toRewardAccount . keyAtIx s' $ nextKeyIx s'
 
         hitGap k = k == acct 1 && not (isKey0Reg s)
+
+-- Helper to annotate whether @a@ has changed with respect to some other value
+-- @a@.
+data HasChanged a = HasChanged a Bool
+    deriving (Functor)
 
 
 --------------------------------------------------------------------------------
