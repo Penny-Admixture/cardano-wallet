@@ -163,7 +163,8 @@ spec = do
 forAllSubchains :: Env -> (Env -> Property) -> Property
 forAllSubchains env prop =  do
     forAllShow (sublistOf (reverse $ txs env)) (fmt . blockListF) $ \subchain ->  do
-        prop $ applyTxs env0 subchain
+        counterexample ("Txs before dropping some:\n" <> (fmt . blockListF $ reverse $ txs env)) $
+            prop $ applyTxs env0 subchain
 
 accK :: StakeKey' 'AccountK XPub
 accK = StakeKey' 0
@@ -392,13 +393,13 @@ txid = Hash . BS.take 4 . blake2b224 . B8.pack . show
 
 data Ledger = Ledger
     { regs :: Set RewardAccount
-    , utxos :: Map TxIn TxOut
+    , utxo :: Map TxIn TxOut
     } deriving (Show, Eq)
 
 instance Buildable Ledger where
     build l = blockMapF
         [ ("regs" :: String, listF' rewardAccountF (regs l))
-        , ("utxos", mapF' inF outF (utxos l))
+        , ("utxo", mapF' inF outF (utxo l))
         ]
 
 initialLedger :: Ledger
@@ -416,7 +417,7 @@ ledgerApplyTx tx h l' =
 
   where
     ledgerApplyInsOus :: Ledger -> Either String Ledger
-    ledgerApplyInsOus (Ledger r utxo) =
+    ledgerApplyInsOus (Ledger r u) =
         let
             -- TODO: There could be duplicates, which we should forbid
             ins = Set.fromList $ map fst $ inputs tx
@@ -426,11 +427,11 @@ ledgerApplyTx tx h l' =
                     [0 ..]
                     (outputs tx)
 
-            canSpend = ins `Set.isSubsetOf` Map.keysSet utxo
+            canSpend = ins `Set.isSubsetOf` Map.keysSet u
 
         in
             if canSpend
-            then Right $ Ledger r $ Map.union newOuts $ utxo `Map.withoutKeys` ins
+            then Right $ Ledger r $ Map.union newOuts $ u `Map.withoutKeys` ins
             else Left $ "invalid utxo spending in tx: " <> pretty tx
 
     ledgerApplyCert :: Cert -> Ledger -> Either String Ledger
