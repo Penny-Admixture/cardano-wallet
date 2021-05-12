@@ -236,7 +236,7 @@ data Cert
     | DeRegisterKey RewardAccount
     deriving (Eq, Show, Generic)
 
--- Given a `DelegationState`, produce a `Tx` registering or de-registering
+-- | Given a `DelegationState`, produce a `Tx` registering or de-registering
 -- stake-keys, in order to have @n@ stake-keys.
 --
 -- E.g. @setPortfolioOf s0 _ _ 2@ creates a tx which after application causes
@@ -268,8 +268,7 @@ setPortfolioOf s mkAddress isReg n =
                 ) <$> pointerIx s'
             }
     in
-        txWithCerts $ reRegKey0IfNeeded
-            ++ deRegKey0IfNeeded
+        txWithCerts $ repairKey0
             ++ case compare (toEnum n) (nextKeyIx s) of
                 GT -> deleg [nextKeyIx s .. toEnum (n - 1)]
                 EQ -> []
@@ -281,17 +280,20 @@ setPortfolioOf s mkAddress isReg n =
         else [RegisterKey (acct ix),  Delegate (acct ix)]
         )
 
-    reRegKey0IfNeeded =
-        if not (isKey0Reg s) && n > 0 && fromEnum (nextKeyIx s) > 1
-        then [RegisterKey (acct minBound), Delegate (acct minBound)]
-        else []
 
-    deRegKey0IfNeeded =
-        [ DeRegisterKey (acct minBound)
-        | (isKey0Reg s)
-        , n == 0
-        , fromEnum (nextKeyIx s) == 0
-        ]
+    repairKey0 = reRegKey0IfNeeded ++ deRegKey0IfNeeded
+      where
+        reRegKey0IfNeeded =
+            if not (isKey0Reg s) && n > 0 && fromEnum (nextKeyIx s) > 1
+            then [RegisterKey (acct minBound), Delegate (acct minBound)]
+            else []
+
+        deRegKey0IfNeeded =
+            [ DeRegisterKey (acct minBound)
+            | (isKey0Reg s)
+            , n == 0
+            , fromEnum (nextKeyIx s) == 0
+            ]
 
     dereg ixs =
         [ DeRegisterKey (acct ix)
