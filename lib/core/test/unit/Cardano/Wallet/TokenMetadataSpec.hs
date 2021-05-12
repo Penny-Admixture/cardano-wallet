@@ -17,7 +17,6 @@ import Cardano.Wallet.Primitive.Types.TokenPolicy
     , AssetLogo (..)
     , AssetMetadata (..)
     , AssetURL (..)
-    , AssetUnit (..)
     , TokenPolicyId (..)
     , nullTokenName
     )
@@ -61,7 +60,7 @@ spec = do
 
             it "golden2.json - Valid WKP" $ do
                 rs <- decodeGoldenBatch (dir </> "golden2.json")
-                length rs `shouldBe` 5
+                length rs `shouldBe` 4
 
             it "golden3.json - Required WKP are invalid" $ do
                 rs <- decodeGoldenBatch (dir </> "golden3.json")
@@ -80,10 +79,9 @@ spec = do
                 rs <- decodeGoldenBatch (dir </> "golden2.json")
                 map metadataFromProperties rs `shouldBe`
                     [ Just golden1Metadata0
-                    , Just (AssetMetadata "Token1" "description1" (Just "tck1") Nothing Nothing Nothing Nothing)
+                    , Just (AssetMetadata "Token1" "description1" (Just "tck1") Nothing Nothing Nothing)
                     , Nothing
-                    , Just (AssetMetadata "Token2" "description2" Nothing Nothing Nothing Nothing Nothing)
-                    , Just (AssetMetadata "Token3" "description3" Nothing Nothing Nothing (Just (AssetUnit "BigToken3" 3)) Nothing)
+                    , Just (AssetMetadata "Token2" "description2" Nothing Nothing Nothing Nothing)
                     ]
 
             it "golden3.json - Required WKP are invalid" $ do
@@ -96,12 +94,12 @@ spec = do
                 rs `shouldNotBe` []
                 map metadataFromProperties rs `shouldBe`
                     map Just
-                    [ AssetMetadata "Token7" "description7" Nothing Nothing Nothing Nothing Nothing
-                    , AssetMetadata "Token9" "description9" Nothing Nothing Nothing Nothing Nothing
-                    , AssetMetadata "Token10" "description10" Nothing Nothing Nothing Nothing Nothing
-                    , AssetMetadata "Token11" "description11" Nothing Nothing Nothing Nothing Nothing
-                    , AssetMetadata "Token12" "description12" Nothing Nothing Nothing Nothing Nothing
-                    , AssetMetadata "Token13" "description13" Nothing Nothing Nothing Nothing Nothing
+                    [ AssetMetadata "Token7" "description7" Nothing Nothing Nothing Nothing
+                    , AssetMetadata "Token11" "description11" Nothing Nothing Nothing Nothing
+                    , AssetMetadata "Token12" "description12" Nothing Nothing Nothing Nothing
+                    , AssetMetadata "Token13" "description13" Nothing Nothing Nothing Nothing
+                    , AssetMetadata "Token14" "description14" Nothing Nothing Nothing Nothing
+                    , AssetMetadata "Token15" "description15" Nothing Nothing Nothing Nothing
                     ]
 
     traceSpec $ describe "Using mock server" $ do
@@ -146,16 +144,15 @@ spec = do
     golden1File = dir </> "golden1.json"
     golden1Metadata0 =
         AssetMetadata "SteveToken" "A sample description"
-            Nothing Nothing Nothing Nothing Nothing
+            Nothing Nothing Nothing Nothing
     golden1Metadata1 =
         AssetMetadata "Token1" "description1"
-            Nothing Nothing Nothing Nothing Nothing
+            Nothing Nothing Nothing Nothing
     golden1Metadata2 =
         AssetMetadata "Token2" "description2"
             (Just "acr2")
             (AssetURL <$> parseURI "https://iohk.io")
             (Just $ AssetLogo $ unsafeFromBase64 "QWxtb3N0IGEgbG9nbw==")
-            (Just $ AssetUnit "unit2" 14)
             (Just $ AssetDecimals 1)
     golden2File = dir </> "golden2.json"
 
@@ -185,7 +182,6 @@ spec = do
                 , Nothing
                 , Nothing
                 , Nothing
-                , Nothing
                 )
            }
         , SubjectProperties
@@ -194,7 +190,6 @@ spec = do
             , properties =
                 ( Just $ Property (Right "Token1") [] 0
                 , Just $ Property (Right "description1") [] 0
-                , Nothing
                 , Nothing
                 , Nothing
                 , Nothing
@@ -210,7 +205,6 @@ spec = do
                 , Just $ Property (Right "acr2") [] 0
                 , Just $ Property (parseAssetURL "https://iohk.io") [] 0
                 , Just $ Property (Right (AssetLogo $ unsafeFromBase64 "QWxtb3N0IGEgbG9nbw==")) [] 0
-                , Just $ Property (Right (AssetUnit "unit2" 14)) [] 0
                 , Just $ Property (Right (AssetDecimals 1)) [] 0
                 )
            }
