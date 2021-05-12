@@ -166,13 +166,6 @@ deriving instance
     , Eq (k 'AddressK XPub)
     ) => Eq (DelegationState k)
 
-accountAtIx
-    :: (SoftDerivation k, ToRewardAccount k)
-    => DelegationState k
-    -> Index 'Soft 'AddressK
-    -> RewardAccount
-accountAtIx s = toRewardAccount . deriveAddressPublicKey (rewardAccountKey s) MutableAccount
-
 keyAtIx
     :: (SoftDerivation k)
     => DelegationState k
@@ -180,24 +173,12 @@ keyAtIx
     -> k 'AddressK XPub
 keyAtIx s = deriveAddressPublicKey (rewardAccountKey s) MutableAccount
 
-nextKey
-    :: (SoftDerivation k, ToRewardAccount k)
-    => DelegationState k
-    -> RewardAccount
-nextKey s = accountAtIx s $ nextKeyIx s
-
 lastActiveIx
     :: DelegationState k
     -> Maybe (Index 'Soft 'AddressK)
 lastActiveIx s
     | nextKeyIx s == minBound = Nothing
     | otherwise               = Just $ pred $ nextKeyIx s
-
-lastActiveKey
-    :: (SoftDerivation k, ToRewardAccount k)
-    => DelegationState k
-    -> Maybe RewardAccount
-lastActiveKey s = accountAtIx s <$> lastActiveIx s
 
 data PointerUTxO = PointerUTxO { pTxIn :: TxIn, pCoin :: Coin }
     deriving (Generic, Eq, Show)
@@ -386,6 +367,9 @@ applyTx (Tx cs ins outs) h s0 =
             _                 -> s'
 
         acct = toRewardAccount . keyAtIx s . toEnum
+
+        lastActiveKey s' = toRewardAccount . keyAtIx s' <$> lastActiveIx s'
+        nextKey s' = toRewardAccount . keyAtIx s' $ nextKeyIx s'
 
         hitGap k = k == acct 1 && not (isKey0Reg s)
 
