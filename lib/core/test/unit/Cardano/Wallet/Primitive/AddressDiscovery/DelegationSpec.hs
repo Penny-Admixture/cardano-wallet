@@ -30,6 +30,8 @@ import Cardano.Wallet.Primitive.AddressDerivation
 import Cardano.Wallet.Primitive.AddressDiscovery.Delegation
 import Cardano.Wallet.Primitive.Types.Address
     ( Address (..) )
+import Cardano.Wallet.Primitive.Types.Coin
+    ( Coin (..) )
 import Cardano.Wallet.Primitive.Types.Hash
     ( Hash (..) )
 import Cardano.Wallet.Primitive.Types.Tx
@@ -319,11 +321,12 @@ env0 = Env (initialDelegationState accK) initialLedger [] []
 
 stepCmd :: Cmd -> Env -> Env
 stepCmd (CmdSetPortfolioOf n) env =
-    case setPortfolioOf (wallet env) mkAddr (acctIsReg (ledger env)) n of
+    case setPortfolioOf (wallet env) minUTxOVal mkAddr (acctIsReg (ledger env)) n of
         Just tx -> tryApplyTx tx env
         Nothing -> env
   where
     mkAddr k = Address $ "addr" <> unRewardAccount (toRewardAccount k)
+    minUTxOVal = Coin 1
 
 stepCmd (CmdAdversarialReg k) env
     | k `Set.member` regs (ledger env)

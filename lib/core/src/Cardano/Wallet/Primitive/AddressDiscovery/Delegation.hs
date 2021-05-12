@@ -1,7 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -219,6 +218,7 @@ unsafeDeserializeDelegationState = DelegationState
 -- Chain
 --------------------------------------------------------------------------------
 
+-- | A transaction type specific to `DelegationState`.
 data Tx = Tx
     { certs :: [Cert]
     , inputs :: [(TxIn, Coin)]
@@ -233,6 +233,8 @@ data Cert
       -- ^ Which pool we're delegating to is here (and for now) irrelevant.
       -- The main thing is that there exists a witness on-chain for this stake
       -- key (registration certs don't require witnesses)
+      --
+      -- TODO: We may also want to add the PoolId here.
     | DeRegisterKey RewardAccount
     deriving (Eq, Show, Generic)
 
@@ -246,17 +248,22 @@ data Cert
 setPortfolioOf
     :: (SoftDerivation k, ToRewardAccount k)
     => DelegationState k
+    -> Coin
+        -- ^ minUTxOVal
     -> (k 'AddressK XPub -> Address)
-    -> (RewardAccount -> Bool) -- TODO: Need a Set or Map for the real implementation with LSQ
+        -- ^ A way to construct an Address
+    -> (RewardAccount -> Bool)
+        -- ^ Whether or not the key is registered.
+        --
+        -- TODO: Need a Set or Map for the real implementation with LSQ.
     -> Int
+        -- ^ Target number of stake keys.
     -> Maybe Tx
-setPortfolioOf s mkAddress isReg n =
+setPortfolioOf s minUTxOVal mkAddress isReg n =
     let s' = s { nextKeyIx = toEnum n }
         mkTxIn (PointerUTxO i c) = (i, c)
-
-        minUTxOVal = Coin 1 -- FIXME
-        -- TODO: Need to rely on wallet to return as change, if the minUTxOVal
-        -- changes. Not sure if this is the case.
+        -- Note: If c > minUTxOVal we need to rely on the wallet to return the
+        -- difference to the user as change.
         txWithCerts [] = Nothing
         txWithCerts cs = Just $ Tx
             { certs = cs
@@ -305,6 +312,10 @@ setPortfolioOf s mkAddress isReg n =
 
     acct = toRewardAccount . keyAtIx s
 
+-- | Apply a `Tx` to a `DelegationState`.
+--
+-- NOTE: May accept invalid sequences of `Tx`s from alternative implementations
+-- than `setPortfolioOf`.
 applyTx
     :: forall k. ( SoftDerivation k
         , ToRewardAccount k
@@ -317,6 +328,8 @@ applyTx
 applyTx (Tx cs ins outs) h s0 =
     let
         s = foldl (flip applyCert) s0 cs
+        -- NOTE: if s == s0 the pointer shouldn't change, and we could skip the
+        -- ins and outs checks for performance.
         isOurOut (TxOut addr _b) =
             case (paymentKeyFingerprint @k . keyAtIx s <$> pointerIx s, paymentKeyFingerprint addr) of
             (Just (Right fp), Right fp')
@@ -329,6 +342,7 @@ applyTx (Tx cs ins outs) h s0 =
         ([],[]) -> s
         ([_],[]) -> s { pointer = Nothing }
         (_, [(ix,TxOut _addr tb)])
+            -- TODO: If we pointer UTxO contains tokens, we might want to crash.
             -> s { pointer = Just $ PointerUTxO (TxIn h ix) (TB.getCoin tb) }
         (_i:_, []) -> error "applyTx: impossible: multiple inputs matching the pointer UTxO"
         ([], _o:_) -> error "applyTx: impossible: multiple recognized outputs"
