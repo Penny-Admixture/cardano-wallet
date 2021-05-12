@@ -344,8 +344,8 @@ applyTx (Tx cs ins outs) h s0 = updatePointer $ foldl (flip applyCert) (HasChang
     updatePointer
         :: HasChanged (DelegationState k)
         -> DelegationState k
-    updatePointer (HasChanged s False) = s
-    updatePointer (HasChanged s True) = case (pointerIns, pointerOuts) of
+    --updatePointer (HasChanged s False) = s
+    updatePointer (HasChanged s _) = case (pointerIns, pointerOuts) of
         ([],[]) -> s
         ([_],[]) -> s { pointer = Nothing }
         (_, (ix,TxOut _addr tb) : _rest)
@@ -381,7 +381,11 @@ applyTx (Tx cs ins outs) h s0 = updatePointer $ foldl (flip applyCert) (HasChang
         in
         HasChanged (s { nextKeyIx = ix' }) (changed || changed')
 
-    applyCert c hc@(HasChanged s _) = fmap modifyKey0 $ flip modifyIx hc $ case c of
+
+    -- TODO: Instead of all this HasChanged logic, we should probably just have
+    -- one @State@ and be very exact about what we expect about the pointer.
+
+    applyCert c hc@(HasChanged s _) = modifyKey0 $ flip modifyIx hc $ case c of
         RegisterKey _ -> id
         Delegate k
             | k == nextKey s            -> succ
@@ -391,14 +395,14 @@ applyTx (Tx cs ins outs) h s0 = updatePointer $ foldl (flip applyCert) (HasChang
             | Just k == lastActiveKey s -> pred
             | otherwise                 -> id
       where
-        modifyKey0 s' = case c of
+        modifyKey0 (HasChanged s' hc') = case c of
             RegisterKey k
-                | k == acct 0 -> s' { isKey0Reg = True }
-                | otherwise   -> s'
+                | k == acct 0 -> HasChanged (s' { isKey0Reg = True }) True
+                | otherwise   -> HasChanged s' hc'
             DeRegisterKey k
-                | k == acct 0 -> s' { isKey0Reg = False }
-                | otherwise   -> s'
-            _                 -> s'
+                | k == acct 0 -> HasChanged (s' { isKey0Reg = False }) True
+                | otherwise   -> HasChanged s' hc'
+            _                 -> HasChanged s' hc'
 
         acct = toRewardAccount . keyAtIx s . toEnum
 
