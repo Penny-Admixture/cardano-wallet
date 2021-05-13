@@ -118,6 +118,7 @@ module Cardano.Wallet.Api
     , SharedWallets
         , PostSharedWallet
         , GetSharedWallet
+        , ListSharedWallets
         , PatchSharedWalletInPayment
         , PatchSharedWalletInDelegation
         , DeleteSharedWallet
@@ -858,6 +859,7 @@ type GetCurrentSMASHHealth = "smash"
 type SharedWallets =
          PostSharedWallet
     :<|> GetSharedWallet
+    :<|> ListSharedWallets
     :<|> PatchSharedWalletInPayment
     :<|> PatchSharedWalletInDelegation
     :<|> DeleteSharedWallet
@@ -871,6 +873,10 @@ type PostSharedWallet = "shared-wallets"
 type GetSharedWallet = "shared-wallets"
     :> Capture "walletId" (ApiT WalletId)
     :> Get '[JSON] ApiSharedWallet
+
+-- | https://input-output-hk.github.io/cardano-wallet/api/#operation/listSharedWallets
+type ListSharedWallets = "shared-wallets"
+    :> Get '[JSON] [ApiSharedWallet]
 
 -- | https://input-output-hk.github.io/cardano-wallet/api/#operation/patchSharedWalletInPayment
 type PatchSharedWalletInPayment = "shared-wallets"
