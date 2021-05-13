@@ -32,7 +32,7 @@
             "value": "STV",
             "signatures": []
         },
-        "decimals" {
+        "decimals": {
             "value": 6,
             "signatures": []
         },
